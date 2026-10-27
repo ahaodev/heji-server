@@ -8,6 +8,7 @@ import (
 
 	"shadmin/domain"
 	"shadmin/ent"
+	"shadmin/ent/apiresource"
 	"shadmin/ent/menu"
 	"shadmin/ent/role"
 	"shadmin/ent/user"
@@ -40,6 +41,7 @@ var defaultMenus = []seedMenu{
 	{key: "api-resource", parentKey: "system", name: "API资源", sequence: 5, typ: "menu", path: "/system/api-resources", icon: "Code2", resources: []string{"GET:/api/v1/system/api-resources"}},
 	{key: "login-log", parentKey: "system", name: "登录日志", sequence: 6, typ: "menu", path: "/system/login-logs", icon: "Layers3", resources: []string{"GET:/api/v1/system/login-logs"}},
 	{key: "dict", parentKey: "system", name: "字典管理", sequence: 7, typ: "menu", path: "/system/dict", icon: "BookMarked", resources: []string{"GET:/api/v1/system/dict/types", "GET:/api/v1/system/dict/items", "GET:/api/v1/system/dict/types/code/:code/items"}},
+	{key: "billing", name: "记账", sequence: 1, typ: "menu", path: "/books", icon: "Wallet", resources: []string{"GET:/api/v1/book", "GET:/api/v1/book/:id", "GET:/api/v1/bill", "GET:/api/v1/bill/:id", "GET:/api/v1/bill/export", "GET:/api/v1/category", "GET:/api/v1/category/:id", "GET:/api/v1/image/list", "GET:/api/v1/image/:id", "GET:/api/v1/sync/changes"}},
 }
 
 // viewerMenuKeys is the explicit read-only menu allowlist for OAuth users.
@@ -74,7 +76,15 @@ var defaultButtons = []seedMenu{
 	{key: "dict-add-item", parentKey: "dict", name: "创建字典项", typ: "button", icon: "Plus", permission: "system:dict:add_item", resources: []string{"POST:/api/v1/system/dict/items"}},
 	{key: "dict-edit-item", parentKey: "dict", name: "编辑字典项", typ: "button", icon: "Edit", permission: "system:dict:edit_item", resources: []string{"PUT:/api/v1/system/dict/items/:id", "GET:/api/v1/system/dict/items/:id"}},
 	{key: "dict-delete-item", parentKey: "dict", name: "删除字典项", typ: "button", icon: "Trash", permission: "system:dict:delete_item", resources: []string{"DELETE:/api/v1/system/dict/items/:id"}},
+	// 记账域按钮：客户端账号（user 角色）默认拥有，用于创建/修改账本与账单
+	{key: "billing-book-write", parentKey: "billing", name: "管理账本", typ: "button", icon: "BookOpen", permission: "billing:book:write", resources: []string{"POST:/api/v1/book", "PUT:/api/v1/book/:id", "DELETE:/api/v1/book/:id", "POST:/api/v1/book/:id/join", "POST:/api/v1/book/:id/share"}},
+	{key: "billing-bill-write", parentKey: "billing", name: "管理账单", typ: "button", icon: "Receipt", permission: "billing:bill:write", resources: []string{"POST:/api/v1/bill", "PUT:/api/v1/bill/:id", "DELETE:/api/v1/bill/:id"}},
+	{key: "billing-category-write", parentKey: "billing", name: "管理分类", typ: "button", icon: "Tag", permission: "billing:category:write", resources: []string{"POST:/api/v1/category", "POST:/api/v1/category/batch", "PUT:/api/v1/category/:id", "DELETE:/api/v1/category/:id"}},
+	{key: "billing-image-write", parentKey: "billing", name: "管理账单图片", typ: "button", icon: "Image", permission: "billing:image:write", resources: []string{"POST:/api/v1/image/upload", "DELETE:/api/v1/image"}},
 }
+
+// billingMenuKeys 是记账域的菜单键，客户端角色（user）需要整组授权。
+var billingMenuKeys = []string{"billing", "billing-book-write", "billing-bill-write", "billing-category-write", "billing-image-write"}
 
 func seedDefaultMenus(ctx context.Context, client *ent.Client) error {
 	menuIDs := make(map[string]string, len(defaultMenus)+len(defaultButtons))
@@ -117,10 +127,31 @@ func createSeedMenu(ctx context.Context, client *ent.Client, item seedMenu, pare
 	if parentID != "" {
 		builder = builder.SetParentID(parentID)
 	}
-	if len(item.resources) > 0 {
-		builder = builder.AddAPIResourceIDs(item.resources...)
+	// 只绑定已入库的 API 资源：InitApiResources 之后才会扫描全量路由，
+	// 缺失的资源（如新增路由尚未扫描）跳过即可，下次启动会补上。
+	resourceIDs, err := existingApiResourceIDs(ctx, client, item.resources)
+	if err != nil {
+		return nil, err
+	}
+	if len(resourceIDs) > 0 {
+		builder = builder.AddAPIResourceIDs(resourceIDs...)
 	}
 	return builder.Save(ctx)
+}
+
+// existingApiResourceIDs 过滤出确实存在于 api_resources 表的 ID。
+func existingApiResourceIDs(ctx context.Context, client *ent.Client, ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	found, err := client.ApiResource.Query().
+		Where(apiresource.IDIn(ids...)).
+		Select(apiresource.FieldID).
+		Strings(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve API resources for menu: %w", err)
+	}
+	return found, nil
 }
 
 // viewerReadOnlyMenus returns only explicitly allowlisted menus whose APIs are read-only.
@@ -287,7 +318,200 @@ func needsDefaultAdminInitialization(ctx context.Context, client *ent.Client) (b
 	if menuCount == 0 {
 		return true, nil
 	}
-	return needsViewerRoleInitialization(ctx, client)
+	needsBilling, err := needsBillingMenus(ctx, client)
+	if err != nil || needsBilling {
+		return true, err
+	}
+	needsViewer, err := needsViewerRoleInitialization(ctx, client)
+	if err != nil || needsViewer {
+		return true, err
+	}
+	return needsClientRoleInitialization(ctx, client)
+}
+
+// billingSeedItems 是记账域的菜单与按钮，按 key 顺序创建（父项在前）。
+func billingSeedItems() []seedMenu {
+	items := make([]seedMenu, 0, len(billingMenuKeys))
+	for _, key := range billingMenuKeys {
+		for _, item := range defaultMenus {
+			if item.key == key {
+				items = append(items, item)
+			}
+		}
+		for _, item := range defaultButtons {
+			if item.key == key {
+				items = append(items, item)
+			}
+		}
+	}
+	return items
+}
+
+// needsBillingMenus 判断是否需要在既有安装上补种记账域菜单。
+// 只向“本项目种子生成的菜单树”补种：既有的系统管理菜单存在、而记账菜单缺失时才算需要，
+// 避免把记账菜单注入到用户自建的菜单集合中。
+func needsBillingMenus(ctx context.Context, client *ent.Client) (bool, error) {
+	seededRoot := false
+	for _, item := range defaultMenus {
+		if item.key == "system" {
+			exists, err := client.Menu.Query().
+				Where(menu.Name(item.name), menu.Type(domain.MenuTypeMenu)).
+				Exist(ctx)
+			if err != nil {
+				return true, fmt.Errorf("check seeded system menu: %w", err)
+			}
+			seededRoot = exists
+		}
+	}
+	if !seededRoot {
+		return false, nil
+	}
+
+	exists, err := client.Menu.Query().
+		Where(menu.Name("记账"), menu.Type(domain.MenuTypeMenu)).
+		Exist(ctx)
+	if err != nil {
+		return true, fmt.Errorf("check billing menu: %w", err)
+	}
+	return !exists, nil
+}
+
+// ensureBillingMenus 补种缺失的记账域菜单，已存在则跳过；返回是否新建过。
+func ensureBillingMenus(ctx context.Context, client *ent.Client) (bool, error) {
+	missing, err := needsBillingMenus(ctx, client)
+	if err != nil || !missing {
+		return false, err
+	}
+
+	menuIDs := make(map[string]string, len(billingMenuKeys))
+	for _, item := range defaultMenus {
+		menuIDs[item.key] = ""
+	}
+	for _, item := range billingSeedItems() {
+		// 已存在的同名菜单直接复用，避免重复种子
+		existing, err := client.Menu.Query().
+			Where(menu.Name(item.name), menu.Type(item.typ)).
+			Only(ctx)
+		if err == nil {
+			menuIDs[item.key] = existing.ID
+			continue
+		}
+		if !ent.IsNotFound(err) {
+			return false, fmt.Errorf("look up billing menu %q: %w", item.name, err)
+		}
+
+		parentID := ""
+		if item.parentKey != "" {
+			parentID = menuIDs[item.parentKey]
+		}
+		created, err := createSeedMenu(ctx, client, item, parentID)
+		if err != nil {
+			return false, fmt.Errorf("seed billing menu %q: %w", item.name, err)
+		}
+		menuIDs[item.key] = created.ID
+	}
+	slog.Info("billing menus seeded")
+	return true, nil
+}
+
+// clientRoleMenus 返回客户端角色应绑定的菜单：记账域整组。
+func clientRoleMenus(ctx context.Context, client *ent.Client) ([]*ent.Menu, error) {
+	menus, err := client.Menu.Query().
+		Where(menu.NameIn(seedMenuNames(billingMenuKeys)...)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list client role menus: %w", err)
+	}
+	return menus, nil
+}
+
+// seedMenuNames 把种子菜单键映射为菜单名，用于按名回查。
+func seedMenuNames(keys []string) []string {
+	byKey := make(map[string]string, len(defaultMenus)+len(defaultButtons))
+	for _, item := range defaultMenus {
+		byKey[item.key] = item.name
+	}
+	for _, item := range defaultButtons {
+		byKey[item.key] = item.name
+	}
+
+	names := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if name, ok := byKey[key]; ok {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// needsClientRoleInitialization 判断客户端角色（user）是否需要创建或重建绑定。
+func needsClientRoleInitialization(ctx context.Context, client *ent.Client) (bool, error) {
+	clientRole, err := client.Role.Query().
+		Where(role.Name(domain.RoleNameClient)).
+		WithMenus().
+		Only(ctx)
+	if ent.IsNotFound(err) {
+		return true, nil
+	}
+	if err != nil {
+		return true, fmt.Errorf("get client role: %w", err)
+	}
+	if clientRole.Status != constants.StatusActive {
+		return true, nil
+	}
+
+	menus, err := clientRoleMenus(ctx, client)
+	if err != nil {
+		return true, err
+	}
+	if len(clientRole.Edges.Menus) != len(menus) {
+		return true, nil
+	}
+	menuIDs := make(map[string]struct{}, len(menus))
+	for _, menuItem := range menus {
+		menuIDs[menuItem.ID] = struct{}{}
+	}
+	for _, menuItem := range clientRole.Edges.Menus {
+		if _, ok := menuIDs[menuItem.ID]; !ok {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// ensureClientRole 创建或重建客户端角色（user）并绑定记账域菜单。
+func ensureClientRole(ctx context.Context, client *ent.Client) error {
+	menus, err := clientRoleMenus(ctx, client)
+	if err != nil {
+		return err
+	}
+
+	clientRole, err := client.Role.Query().
+		Where(role.Name(domain.RoleNameClient)).
+		Only(ctx)
+	if ent.IsNotFound(err) {
+		clientRole, err = client.Role.Create().
+			SetName(domain.RoleNameClient).
+			SetSequence(10).
+			SetStatus(constants.StatusActive).
+			Save(ctx)
+		if err != nil {
+			return fmt.Errorf("create client role: %w", err)
+		}
+	} else if err != nil {
+		return fmt.Errorf("get client role: %w", err)
+	}
+
+	update := client.Role.UpdateOneID(clientRole.ID).
+		SetStatus(constants.StatusActive).
+		ClearMenus()
+	if len(menus) > 0 {
+		update = update.AddMenus(menus...)
+	}
+	if _, err := update.Save(ctx); err != nil {
+		return fmt.Errorf("bind billing menus to client role: %w", err)
+	}
+	return nil
 }
 
 func initDefaultAdmin(app *Application, ctx context.Context) error {
@@ -307,7 +531,10 @@ func initDefaultAdmin(app *Application, ctx context.Context) error {
 		if err := initMenu(app.DB, adminRole.ID, ctx); err != nil {
 			return err
 		}
-		return ensureViewerRole(ctx, app.DB)
+		if err := ensureViewerRole(ctx, app.DB); err != nil {
+			return err
+		}
+		return ensureClientRole(ctx, app.DB)
 	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(app.Env.AdminPassword), bcrypt.DefaultCost)
@@ -339,6 +566,9 @@ func initDefaultAdmin(app *Application, ctx context.Context) error {
 		return fmt.Errorf("initialize admin menus: %w", err)
 	}
 	if err := ensureViewerRole(ctx, app.DB); err != nil {
+		return err
+	}
+	if err := ensureClientRole(ctx, app.DB); err != nil {
 		return err
 	}
 	slog.Info("admin user created", "username", app.Env.AdminUsername)
@@ -381,6 +611,10 @@ func initMenu(client *ent.Client, adminRoleID string, ctx context.Context) error
 			return err
 		}
 		slog.Info("menu data initialized")
+	}
+	// 已存在的安装：补种后续版本新增的记账域菜单
+	if _, err := ensureBillingMenus(ctx, client); err != nil {
+		return err
 	}
 	return bindMenusToAdmin(client, adminRoleID, ctx)
 }

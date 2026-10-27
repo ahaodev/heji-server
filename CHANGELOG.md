@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.6.0] - 2026-10-27
+
+### Added
+
+- Billing domain ported from the 合記 (heji) ledger service, rebuilt on this template's layers: `Book`, `Bill`, `Category`, `BillImage` Ent schemas; domain contracts in `domain/billing.go`; repositories, usecases and controllers under `/api/v1/book`, `/bill`, `/category`, `/image`, `/sync/changes`.
+- `/api/v1/Register`, `/api/v1/Login` and `/api/v1/mqtt/broker` keep the heji Android client contract (phone + password, bare access token in `data`), isolated in `ClientAuthUseCase` so `/auth/*` is unchanged.
+- `user` role seeded with the billing menu tree and `billing:*:write` permissions; mobile client registrations bind it automatically.
+- `internal/notifier` publishes book changes over MQTT (`heji/notify/{userId}/{entity}`), best-effort and disabled when `MQTT_ADDRESS` is empty.
+- Billing frontend: `features/billing` (books list, bills table with filters and CSV export, book/bill dialogs) plus `routes/_authenticated/books`.
+- `MQTT_ADDRESS`, `MQTT_TCP_PORT`, `MQTT_WS_PORT` configuration keys.
+
+### Changed
+
+- Menu seeding now binds only API resources that already exist in `api_resources`, so a menu referencing a not-yet-scanned route no longer fails startup. `InitApiResources` runs before seeding, so the full set is present in practice.
+- Existing installations get the billing menus back-filled on startup when their seeded system menu tree is present; user-owned menu trees are left untouched.
+
 ## [0.5.6] - 2026-10-25
 
 ### Changed

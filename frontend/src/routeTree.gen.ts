@@ -24,6 +24,8 @@ import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedAuthDeviceRouteImport } from './routes/_authenticated/auth/device'
+import { Route as AuthenticatedBooksIndexRouteImport } from './routes/_authenticated/books/index'
+import { Route as AuthenticatedBooksBookIdRouteImport } from './routes/_authenticated/books/$bookId'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
 import { Route as AuthenticatedHelpCenterIndexRouteImport } from './routes/_authenticated/help-center/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
@@ -112,6 +114,17 @@ const AuthenticatedAuthDeviceRoute = AuthenticatedAuthDeviceRouteImport.update({
   path: '/auth/device',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBooksIndexRoute = AuthenticatedBooksIndexRouteImport.update({
+  id: '/books/',
+  path: '/books/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedBooksBookIdRoute =
+  AuthenticatedBooksBookIdRouteImport.update({
+    id: '/books/$bookId',
+    path: '/books/$bookId',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedErrorsErrorRoute =
   AuthenticatedErrorsErrorRouteImport.update({
     id: '/errors/$error',
@@ -196,6 +209,7 @@ export interface FileRoutesByFullPath {
   '/500': typeof errors500Route
   '/503': typeof errors503Route
   '/auth/device': typeof AuthenticatedAuthDeviceRoute
+  '/books/$bookId': typeof AuthenticatedBooksBookIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -206,6 +220,7 @@ export interface FileRoutesByFullPath {
   '/system/menu': typeof AuthenticatedSystemMenuRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
   '/system/user': typeof AuthenticatedSystemUserRoute
+  '/books/': typeof AuthenticatedBooksIndexRoute
   '/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
 }
@@ -223,6 +238,7 @@ export interface FileRoutesByTo {
   '/503': typeof errors503Route
   '/': typeof AuthenticatedIndexRoute
   '/auth/device': typeof AuthenticatedAuthDeviceRoute
+  '/books/$bookId': typeof AuthenticatedBooksBookIdRoute
   '/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -233,6 +249,7 @@ export interface FileRoutesByTo {
   '/system/menu': typeof AuthenticatedSystemMenuRoute
   '/system/role': typeof AuthenticatedSystemRoleRoute
   '/system/user': typeof AuthenticatedSystemUserRoute
+  '/books': typeof AuthenticatedBooksIndexRoute
   '/help-center': typeof AuthenticatedHelpCenterIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
 }
@@ -253,6 +270,7 @@ export interface FileRoutesById {
   '/(errors)/503': typeof errors503Route
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/auth/device': typeof AuthenticatedAuthDeviceRoute
+  '/_authenticated/books/$bookId': typeof AuthenticatedBooksBookIdRoute
   '/_authenticated/errors/$error': typeof AuthenticatedErrorsErrorRoute
   '/_authenticated/settings/account': typeof AuthenticatedSettingsAccountRoute
   '/_authenticated/settings/appearance': typeof AuthenticatedSettingsAppearanceRoute
@@ -263,6 +281,7 @@ export interface FileRoutesById {
   '/_authenticated/system/menu': typeof AuthenticatedSystemMenuRoute
   '/_authenticated/system/role': typeof AuthenticatedSystemRoleRoute
   '/_authenticated/system/user': typeof AuthenticatedSystemUserRoute
+  '/_authenticated/books/': typeof AuthenticatedBooksIndexRoute
   '/_authenticated/help-center/': typeof AuthenticatedHelpCenterIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
 }
@@ -283,6 +302,7 @@ export interface FileRouteTypes {
     | '/500'
     | '/503'
     | '/auth/device'
+    | '/books/$bookId'
     | '/errors/$error'
     | '/settings/account'
     | '/settings/appearance'
@@ -293,6 +313,7 @@ export interface FileRouteTypes {
     | '/system/menu'
     | '/system/role'
     | '/system/user'
+    | '/books/'
     | '/help-center/'
     | '/settings/'
   fileRoutesByTo: FileRoutesByTo
@@ -310,6 +331,7 @@ export interface FileRouteTypes {
     | '/503'
     | '/'
     | '/auth/device'
+    | '/books/$bookId'
     | '/errors/$error'
     | '/settings/account'
     | '/settings/appearance'
@@ -320,6 +342,7 @@ export interface FileRouteTypes {
     | '/system/menu'
     | '/system/role'
     | '/system/user'
+    | '/books'
     | '/help-center'
     | '/settings'
   id:
@@ -339,6 +362,7 @@ export interface FileRouteTypes {
     | '/(errors)/503'
     | '/_authenticated/'
     | '/_authenticated/auth/device'
+    | '/_authenticated/books/$bookId'
     | '/_authenticated/errors/$error'
     | '/_authenticated/settings/account'
     | '/_authenticated/settings/appearance'
@@ -349,6 +373,7 @@ export interface FileRouteTypes {
     | '/_authenticated/system/menu'
     | '/_authenticated/system/role'
     | '/_authenticated/system/user'
+    | '/_authenticated/books/'
     | '/_authenticated/help-center/'
     | '/_authenticated/settings/'
   fileRoutesById: FileRoutesById
@@ -475,6 +500,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAuthDeviceRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/books/': {
+      id: '/_authenticated/books/'
+      path: '/books'
+      fullPath: '/books/'
+      preLoaderRoute: typeof AuthenticatedBooksIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/books/$bookId': {
+      id: '/_authenticated/books/$bookId'
+      path: '/books/$bookId'
+      fullPath: '/books/$bookId'
+      preLoaderRoute: typeof AuthenticatedBooksBookIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/errors/$error': {
       id: '/_authenticated/errors/$error'
       path: '/errors/$error'
@@ -584,6 +623,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAuthDeviceRoute: typeof AuthenticatedAuthDeviceRoute
+  AuthenticatedBooksBookIdRoute: typeof AuthenticatedBooksBookIdRoute
   AuthenticatedErrorsErrorRoute: typeof AuthenticatedErrorsErrorRoute
   AuthenticatedSystemApiResourcesRoute: typeof AuthenticatedSystemApiResourcesRoute
   AuthenticatedSystemDepartmentsRoute: typeof AuthenticatedSystemDepartmentsRoute
@@ -592,6 +632,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSystemMenuRoute: typeof AuthenticatedSystemMenuRoute
   AuthenticatedSystemRoleRoute: typeof AuthenticatedSystemRoleRoute
   AuthenticatedSystemUserRoute: typeof AuthenticatedSystemUserRoute
+  AuthenticatedBooksIndexRoute: typeof AuthenticatedBooksIndexRoute
   AuthenticatedHelpCenterIndexRoute: typeof AuthenticatedHelpCenterIndexRoute
 }
 
@@ -599,6 +640,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAuthDeviceRoute: AuthenticatedAuthDeviceRoute,
+  AuthenticatedBooksBookIdRoute: AuthenticatedBooksBookIdRoute,
   AuthenticatedErrorsErrorRoute: AuthenticatedErrorsErrorRoute,
   AuthenticatedSystemApiResourcesRoute: AuthenticatedSystemApiResourcesRoute,
   AuthenticatedSystemDepartmentsRoute: AuthenticatedSystemDepartmentsRoute,
@@ -607,6 +649,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSystemMenuRoute: AuthenticatedSystemMenuRoute,
   AuthenticatedSystemRoleRoute: AuthenticatedSystemRoleRoute,
   AuthenticatedSystemUserRoute: AuthenticatedSystemUserRoute,
+  AuthenticatedBooksIndexRoute: AuthenticatedBooksIndexRoute,
   AuthenticatedHelpCenterIndexRoute: AuthenticatedHelpCenterIndexRoute,
 }
 

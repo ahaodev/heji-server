@@ -39,6 +39,10 @@ var errorRules = []errorRule{
 	{domain.ErrInvalidInvitation, http.StatusBadRequest, "邀请链接无效或已过期"},
 	{domain.ErrInvitationRoleInvalid, http.StatusBadRequest, "所选角色不可用"},
 	{domain.ErrInvitationPasswordInvalid, http.StatusBadRequest, "密码长度必须为 8 到 72 字节"},
+	// 记账域
+	{domain.ErrInvalidBillTime, http.StatusBadRequest, ""},
+	{domain.ErrImageBillMismatch, http.StatusBadRequest, ""},
+	{domain.ErrRegisterUserExists, http.StatusConflict, ""},
 	// 设备授权码流程：CLI 依赖响应体里的原文（authorization_pending / slow_down / ...）
 	{domain.ErrDeviceAuthorizationPending, http.StatusBadRequest, ""},
 	{domain.ErrDeviceSlowDown, http.StatusBadRequest, ""},
@@ -56,6 +60,7 @@ var errorRules = []errorRule{
 	// 403 禁止
 	{domain.ErrAccountInactive, http.StatusForbidden, ""},
 	{domain.ErrUserDisabled, http.StatusForbidden, ""},
+	{domain.ErrNotBookMember, http.StatusForbidden, ""},
 	{domain.ErrCannotDeleteSelf, http.StatusForbidden, ""},
 	{domain.ErrCannotDeleteAdmin, http.StatusForbidden, ""},
 	{domain.ErrCannotEditAdmin, http.StatusForbidden, ""},
@@ -70,6 +75,10 @@ var errorRules = []errorRule{
 	{domain.ErrDictTypeNotFound, http.StatusNotFound, "Dictionary type not found"},
 	{domain.ErrDictItemNotFound, http.StatusNotFound, "Dictionary item not found"},
 	{domain.ErrUserIdentityCodeInvalid, http.StatusNotFound, ""},
+	{domain.ErrBookNotFound, http.StatusNotFound, ""},
+	{domain.ErrBillNotFound, http.StatusNotFound, ""},
+	{domain.ErrCategoryNotFound, http.StatusNotFound, ""},
+	{domain.ErrBillImageNotFound, http.StatusNotFound, ""},
 
 	// 409 冲突
 	{domain.ErrRoleNameExists, http.StatusConflict, ""},
@@ -81,6 +90,7 @@ var errorRules = []errorRule{
 	{domain.ErrUserExists, http.StatusConflict, ""},
 	{domain.ErrUserAlreadyExists, http.StatusConflict, "该邮箱已关联现有用户"},
 	{domain.ErrUsernameExists, http.StatusConflict, "用户名已被使用"},
+	{domain.ErrBookNameExists, http.StatusConflict, ""},
 
 	// 5xx 依赖服务
 	{domain.ErrInvitationEmailNotConfigured, http.StatusServiceUnavailable, "邀请邮件服务未配置"},

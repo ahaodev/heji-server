@@ -97,3 +97,39 @@ func (f *ControllerFactory) CreateDictController() *controller.DictController {
 func (f *ControllerFactory) CreateDepartmentController() *controller.DepartmentController {
 	return &controller.DepartmentController{DepartmentUseCase: f.uc.Department}
 }
+
+// CreateClientAuthController creates the heji mobile-client auth controller.
+func (f *ControllerFactory) CreateClientAuthController() *controller.ClientAuthController {
+	return &controller.ClientAuthController{
+		ClientAuthUseCase: f.uc.ClientAuth,
+		Env:               f.app.Env,
+	}
+}
+
+// CreateBookController creates a ledger book controller
+func (f *ControllerFactory) CreateBookController() *controller.BookController {
+	return &controller.BookController{BookUseCase: f.uc.Book}
+}
+
+// CreateBillController creates a bill controller
+func (f *ControllerFactory) CreateBillController() *controller.BillController {
+	return &controller.BillController{BillUseCase: f.uc.Bill}
+}
+
+// CreateCategoryController creates a category controller
+func (f *ControllerFactory) CreateCategoryController() *controller.CategoryController {
+	return &controller.CategoryController{CategoryUseCase: f.uc.Category}
+}
+
+// CreateImageController creates a bill image controller
+func (f *ControllerFactory) CreateImageController() *controller.ImageController {
+	return &controller.ImageController{
+		ImageUseCase: f.uc.BillImage,
+		FileStorage:  f.app.FileStorage,
+	}
+}
+
+// CreateSyncController creates an incremental sync controller
+func (f *ControllerFactory) CreateSyncController() *controller.SyncController {
+	return &controller.SyncController{SyncUseCase: f.uc.Sync}
+}

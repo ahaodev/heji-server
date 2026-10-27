@@ -31,6 +31,9 @@ func (pr *ProtectedRoutes) Setup(router *gin.RouterGroup, app *bootstrap.Applica
 	// Setup different route groups
 	pr.setupUserRoutes(protectedRouter, app)
 	pr.setupSystemRoutes(protectedRouter, app)
+
+	// 合記记账域（账本 / 账单 / 分类 / 图片 / 同步），逐组用 Casbin 校验
+	pr.setupBillingRoutes(protectedRouter, middleware.NewCasbinMiddleware(app.CasManager))
 }
 
 // setupUserRoutes configures basic user functionality routes

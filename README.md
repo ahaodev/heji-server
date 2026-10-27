@@ -28,6 +28,7 @@
 - 🔍 **Global Search** — Quick navigation across menus and resources
 - 📊 **Dashboard** — Data visualization with charts and statistics
 - 🗂️ **Dynamic Menus** — Backend‑driven menu tree with permission‑aware rendering
+- 📒 **Billing** — Shared ledger books, bills, categories, receipt images, CSV export and incremental sync
 - ⚡ **Cacher** — Supports Redis or go-cache, flexible and optional
 - 🗄️ **Multi‑Database** — SQLite (default), PostgreSQL, MySQL out of the box
 

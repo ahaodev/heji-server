@@ -93,6 +93,7 @@ func (User) Edges() []ent.Edge {
 			Unique(),
 		edge.To("identity_accounts", UserIdentity.Type).Comment("用户关联的第三方身份"),
 		edge.To("invitations", UserInvitation.Type).Comment("用户邀请记录"),
+		edge.To("books", Book.Type).Comment("用户加入的账本"),
 	}
 }
 

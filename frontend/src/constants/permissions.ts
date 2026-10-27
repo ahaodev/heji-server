@@ -1,4 +1,18 @@
 export const PERMISSIONS = {
+  BILLING: {
+    BOOK: {
+      WRITE: 'billing:book:write',
+    },
+    BILL: {
+      WRITE: 'billing:bill:write',
+    },
+    CATEGORY: {
+      WRITE: 'billing:category:write',
+    },
+    IMAGE: {
+      WRITE: 'billing:image:write',
+    },
+  },
   SYSTEM: {
     MENU: {
       ADD: 'system:menu:add',

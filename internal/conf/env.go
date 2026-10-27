@@ -75,6 +75,11 @@ type Env struct {
 	ResendFromEmail       string `mapstructure:"RESEND_FROM_EMAIL"`
 	InvitationAcceptURL   string `mapstructure:"INVITATION_ACCEPT_URL"`
 	InvitationExpiryHours int    `mapstructure:"INVITATION_EXPIRY_HOURS"`
+
+	// 记账推送配置：账本变更经 MQTT 推送给移动客户端；地址留空即关闭推送
+	MQTTAddress string `mapstructure:"MQTT_ADDRESS"`
+	MQTTTCPPort string `mapstructure:"MQTT_TCP_PORT"`
+	MQTTWSPort  string `mapstructure:"MQTT_WS_PORT"`
 }
 
 // CacheTypeValue 返回规范化后的缓存类型。
@@ -142,6 +147,11 @@ func setDefaults() {
 		"RESEND_FROM_EMAIL":       "Shadmin <no-reply@send.ahaodev.com>",
 		"INVITATION_ACCEPT_URL":   "http://localhost:5173/accept-invitation",
 		"INVITATION_EXPIRY_HOURS": 72,
+
+		// 记账推送配置（留空即不连接 broker）
+		"MQTT_ADDRESS":  "",
+		"MQTT_TCP_PORT": "1883",
+		"MQTT_WS_PORT":  "8083",
 	}
 	// 绑定环境变量
 	viper.AutomaticEnv()
@@ -195,6 +205,10 @@ func generateEnvFile() error {
 		{
 			title: "# 邀请邮件配置",
 			keys:  []string{"RESEND_KEY", "RESEND_FROM_EMAIL", "INVITATION_ACCEPT_URL", "INVITATION_EXPIRY_HOURS"},
+		},
+		{
+			title: "# 记账推送配置（MQTT_ADDRESS 留空即关闭推送）",
+			keys:  []string{"MQTT_ADDRESS", "MQTT_TCP_PORT", "MQTT_WS_PORT"},
 		},
 	}
 

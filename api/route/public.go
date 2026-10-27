@@ -35,6 +35,9 @@ func (pr *PublicRoutes) Setup(router *gin.RouterGroup, app *bootstrap.Applicatio
 	// Authentication routes
 	authGroup := router.Group("/auth")
 	pr.setupAuthRoutes(authGroup)
+
+	// 合記 Android 客户端兼容端点：/Register、/Login、/mqtt/broker
+	pr.setupClientCompatRoutes(router)
 }
 
 // setupHealthRoutes configures health check routes

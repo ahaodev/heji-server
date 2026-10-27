@@ -26,6 +26,14 @@ type Usecases struct {
 	LoginLog       domain.LoginLogUseCase
 	Dict           domain.DictUseCase
 	Department     domain.DepartmentUseCase
+
+	// 合記记账域与移动客户端
+	ClientAuth domain.ClientAuthUseCase
+	Book       domain.BookUseCase
+	Bill       domain.BillUseCase
+	Category   domain.CategoryUseCase
+	BillImage  domain.BillImageUseCase
+	Sync       domain.SyncUseCase
 }
 
 // newUsecases 依赖注入的唯一位置：repository → usecase。调用前 app 的 DB、Cacher、
@@ -41,6 +49,9 @@ func newUsecases(app *Application) *Usecases {
 	loginLog := usecase.NewLoginLogUsecase(repository.NewLoginLogRepository(db), timeout)
 	tokens := app.Tokens
 	captcha := usecase.NewCaptchaUsecase(app.CaptchaManager, timeout)
+
+	bookRepo := repository.NewBookRepository(db)
+	billRepo := repository.NewBillRepository(db)
 
 	var emailSender domain.InvitationMailer
 	if env.ResendKey != "" {
@@ -91,5 +102,19 @@ func newUsecases(app *Application) *Usecases {
 		LoginLog:    loginLog,
 		Dict:        usecase.NewDictUsecase(repository.NewDictRepository(db), timeout),
 		Department:  usecase.NewDepartmentUsecase(repository.NewDepartmentRepository(db), timeout),
+
+		ClientAuth: usecase.NewClientAuthUsecase(
+			userRepo,
+			roleRepo,
+			loginLog,
+			auth.NewLoginSecurityManager(app.Cacher),
+			tokens,
+			timeout,
+		),
+		Book:      usecase.NewBookUsecase(bookRepo, app.BillingNotifier, timeout),
+		Bill:      usecase.NewBillUsecase(billRepo, bookRepo, userRepo, app.BillingNotifier, timeout),
+		Category:  usecase.NewCategoryUsecase(repository.NewCategoryRepository(db), bookRepo, timeout),
+		BillImage: usecase.NewBillImageUsecase(repository.NewBillImageRepository(db), billRepo, bookRepo, app.FileStorage, timeout),
+		Sync:      usecase.NewSyncUsecase(repository.NewSyncRepository(db), timeout),
 	}
 }

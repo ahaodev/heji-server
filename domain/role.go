@@ -10,6 +10,8 @@ const (
 	RoleStatusActive   = StatusActive
 	RoleStatusInactive = StatusInactive
 	RoleNameViewer     = "viewer"
+	// RoleNameClient 是合記移动客户端注册用户默认绑定的角色。
+	RoleNameClient = "user"
 )
 
 var (

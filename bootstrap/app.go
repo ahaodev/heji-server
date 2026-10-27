@@ -11,6 +11,7 @@ import (
 	captchapkg "shadmin/internal/captcha"
 	"shadmin/internal/casbin"
 	"shadmin/internal/conf"
+	"shadmin/internal/notifier"
 	"shadmin/internal/scheduler"
 	"shadmin/internal/tokenservice"
 	"shadmin/pkg"
@@ -33,6 +34,7 @@ type Application struct {
 	UserStatusCache   *auth.Cache                    // 用户状态TTL缓存，用于登录/刷新/中间件检查
 	TokenBlacklist    domain.TokenBlacklist          // JWT 登出黑名单（内存或 Redis）
 	Tokens            domain.TokenIssuer             // JWT 签发与解析（路由中间件与用例共用）
+	BillingNotifier   domain.BillingNotifier         // 账本变更推送（MQTT；未配置时为 nil）
 	Usecases          *Usecases                      // 装配完成的全部用例
 	Version           string                         // 应用版本
 }
@@ -121,6 +123,16 @@ func App() (*Application, error) {
 		return fail("init storage: %w", err)
 	}
 	app.FileStorage = storageConfig.FileStorage
+
+	// 记账变更推送：MQTT 未配置或连接失败时降级为不推送，业务写入不受影响。
+	// 依赖 FileStorage 之后的 DB 仓储，故放在此处初始化。
+	notifier, err := notifier.NewMQTTNotifier(app.Env.MQTTAddress, app.Env.MQTTTCPPort, repository.NewBookRepository(app.DB))
+	if err != nil {
+		slog.Warn("MQTT notifier unavailable, billing change notifications disabled", "error", err)
+	} else if notifier != nil {
+		app.BillingNotifier = notifier
+	}
+
 	if app.Env.AppEnv == conf.AppEnvProd {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -149,6 +161,11 @@ func (app *Application) CloseDBConnection() {
 	// 停止Casbin同步调度器
 	if app.CasbinScheduler != nil {
 		app.CasbinScheduler.Stop()
+	}
+
+	// 断开 MQTT 推送连接
+	if closer, ok := app.BillingNotifier.(interface{ Close() }); ok {
+		closer.Close()
 	}
 
 	if app.Cacher != nil {

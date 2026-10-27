@@ -1,0 +1,96 @@
+import { getRouteApi } from '@tanstack/react-router'
+import { type NavigateFn } from '@/hooks/use-table-url-state'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/layout/page-header'
+import { ApiResourcesProvider } from './components/api-resources-provider'
+import { ApiResourcesTable } from './components/api-resources-table'
+import { useApiResources } from './hooks/use-api-resources'
+
+const route = getRouteApi('/_authenticated/system/api-resources')
+
+export function ApiResources() {
+  const search = route.useSearch()
+  const navigate = route.useNavigate()
+
+  // Extract query parameters from URL search
+  const queryParams = {
+    page: search.page || 1,
+    page_size: search.page_size || 10,
+    module: search.module
+      ? Array.isArray(search.module)
+        ? search.module.join(',')
+        : search.module
+      : undefined,
+    method: search.method || undefined,
+    path: search.path || undefined,
+  }
+
+  // Use regular hook with forced refresh on parameter changes
+  const {
+    data: apiResourcesData,
+    isLoading,
+    isFetching,
+    error,
+  } = useApiResources(queryParams)
+
+  // Create a wrapper function to match NavigateFn type
+  const navigateWrapper: NavigateFn = ({ search: searchUpdate, replace }) => {
+    navigate({ search: searchUpdate, replace })
+  }
+
+  // Reset function to clear all filters and reset to defaults
+  const handleReset = () => {
+    // Use window.location to force a complete navigation refresh
+    window.location.href = '/system/api-resources'
+  }
+
+  return (
+    <ApiResourcesProvider>
+      <PageHeader fixed />
+
+      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
+        <div className='flex flex-wrap items-end justify-between gap-2'>
+          <div>
+            <h2 className='text-2xl font-bold tracking-tight'>API资源管理</h2>
+            <p className='text-muted-foreground'>管理API资源和权限绑定</p>
+          </div>
+        </div>
+        {isLoading && !apiResourcesData ? (
+          <div className='space-y-4'>
+            <div className='flex items-center justify-between'>
+              <Skeleton className='h-8 w-48' />
+              <Skeleton className='h-10 w-32' />
+            </div>
+            <div className='space-y-2'>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className='h-16 w-full' />
+              ))}
+            </div>
+          </div>
+        ) : error ? (
+          <div className='text-muted-foreground flex h-32 items-center justify-center'>
+            加载API资源数据失败，请重试
+          </div>
+        ) : (
+          <div className='relative flex flex-1 flex-col'>
+            {isFetching && (
+              <div className='absolute top-0 right-0 z-10'>
+                <div className='bg-background/80 text-muted-foreground rounded-md border px-2 py-1 text-xs backdrop-blur-sm'>
+                  更新中...
+                </div>
+              </div>
+            )}
+            <ApiResourcesTable
+              data={apiResourcesData?.list || []}
+              search={search}
+              navigate={navigateWrapper}
+              totalCount={apiResourcesData?.total || 0}
+              onReset={handleReset}
+            />
+          </div>
+        )}
+      </Main>
+    </ApiResourcesProvider>
+  )
+}

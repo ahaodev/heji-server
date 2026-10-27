@@ -1,0 +1,152 @@
+import { useEffect } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { getRoles } from '@/services/roleApi'
+import { getUserRoleList } from '@/services/userApi'
+import { type User, type UserStatus } from '@/types/user'
+import { ROLES_QUERY_KEY } from '@/features/system/roles/constants/query-keys'
+import { type UserFormData, userFormSchema } from '../data/schema'
+import { USERS_QUERY_KEY, useCreateUser, useUpdateUser } from './use-users'
+
+interface UseUserFormProps {
+  currentRow?: User
+  onSuccess: () => void
+}
+
+export function useUserForm({ currentRow, onSuccess }: UseUserFormProps) {
+  const isEdit = !!currentRow
+  const createUser = useCreateUser()
+  const updateUser = useUpdateUser()
+  const queryClient = useQueryClient()
+
+  // Fetch user roles if editing
+  const { data: userRoles = [] } = useQuery<string[]>({
+    queryKey: ['userRoles', currentRow?.id],
+    queryFn: () => getUserRoleList(currentRow!.id),
+    enabled: !!currentRow?.id,
+    select: (data) => (Array.isArray(data) ? data : []),
+  })
+
+  // Fetch all roles for selection
+  const { data: allRoles = [] } = useQuery({
+    queryKey: [ROLES_QUERY_KEY],
+    queryFn: getRoles,
+  })
+
+  const form = useForm<UserFormData>({
+    resolver: zodResolver(userFormSchema),
+    defaultValues: {
+      username: isEdit ? currentRow.username : '',
+      email: isEdit ? currentRow.email : '',
+      phone: isEdit ? currentRow.phone || '' : '',
+      status: isEdit ? currentRow.status : 'active',
+      password: '',
+      confirmPassword: '',
+      roles: [],
+      department_id: isEdit ? currentRow.department_id || '' : '',
+      isEdit,
+    },
+  })
+
+  // Update form roles when userRoles data is loaded
+  useEffect(() => {
+    if (isEdit && userRoles.length > 0) {
+      form.setValue('roles', userRoles)
+    }
+  }, [isEdit, userRoles, form])
+
+  const onSubmit = async (values: UserFormData) => {
+    try {
+      if (isEdit) {
+        const updateData: Record<string, unknown> = {
+          username: values.username,
+          email: values.email,
+          phone: values.phone || undefined,
+          status: values.status,
+          department_id: values.department_id || undefined,
+        }
+
+        if (values.password) {
+          updateData.password = values.password
+        }
+
+        // Create mapping from role name to role ID for the new roles
+        const roleNameToIdMap = allRoles.reduce(
+          (map, role) => {
+            map[role.name] = role.id
+            return map
+          },
+          {} as Record<string, string>
+        )
+
+        // Convert role names to role IDs
+        const roleIds = values.roles
+          .map((roleName) => roleNameToIdMap[roleName])
+          .filter(Boolean)
+
+        // Update user with roles included
+        const updateDataWithRoles = {
+          ...updateData,
+          role_ids: roleIds,
+        }
+
+        await updateUser.mutateAsync({
+          id: currentRow!.id,
+          data: updateDataWithRoles,
+        })
+
+        // Invalidate queries
+        queryClient.invalidateQueries({
+          queryKey: ['userRoles', currentRow!.id],
+        })
+        queryClient.invalidateQueries({ queryKey: [USERS_QUERY_KEY] })
+      } else {
+        // Create mapping from role name to role ID
+        const roleNameToIdMap = allRoles.reduce(
+          (map, role) => {
+            map[role.name] = role.id
+            return map
+          },
+          {} as Record<string, string>
+        )
+
+        // Convert role names to role IDs
+        const roleIds = values.roles
+          .map((roleName) => roleNameToIdMap[roleName])
+          .filter(Boolean)
+
+        // Create user with roles
+        await createUser.mutateAsync({
+          username: values.username,
+          email: values.email,
+          phone: values.phone || undefined,
+          password: values.password,
+          status: values.status as UserStatus,
+          role_ids: roleIds,
+          department_id: values.department_id || undefined,
+        })
+
+        queryClient.invalidateQueries({ queryKey: [USERS_QUERY_KEY] })
+      }
+
+      form.reset()
+      onSuccess()
+    } catch (error) {
+      console.error('Error submitting user form:', error)
+    }
+  }
+
+  const isPasswordTouched = !!form.formState.dirtyFields.password
+  const isSubmitting = createUser.isPending || updateUser.isPending
+
+  return {
+    form,
+    onSubmit,
+    isEdit,
+    isPasswordTouched,
+    isSubmitting,
+    allRoles,
+    userRoles,
+  }
+}

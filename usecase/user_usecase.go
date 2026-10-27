@@ -1,0 +1,221 @@
+package usecase
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"shadmin/internal/constants"
+	"time"
+
+	"shadmin/domain"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+type userUsecase struct {
+	userRepository domain.UserRepository
+	contextTimeout time.Duration
+}
+
+func NewUserUsecase(userRepository domain.UserRepository, timeout time.Duration) domain.UserUseCase {
+	return &userUsecase{
+		userRepository: userRepository,
+		contextTimeout: timeout,
+	}
+}
+
+func (uu *userUsecase) CreateUser(ctx context.Context, request *domain.CreateUserRequest) (*domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, uu.contextTimeout)
+	defer cancel()
+
+	// 创建用户对象
+	user := &domain.User{
+		Username:     request.Username,
+		Email:        request.Email,
+		Phone:        request.Phone,
+		Password:     request.Password,
+		Status:       request.Status,
+		DepartmentID: request.DepartmentID,
+	}
+
+	// 设置默认状态
+	if user.Status == "" {
+		user.Status = constants.UserStatusActive
+	}
+
+	// 🔒 加密密码
+	if user.Password != "" {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return nil, fmt.Errorf("failed to hash password: %w", err)
+		}
+		user.Password = string(hashedPassword)
+	}
+
+	// 创建用户与角色关联在同一授权事务中提交。
+	if err := uu.userRepository.CreateWithRoles(ctx, user, request.RoleIDs); err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return user, nil
+}
+func (uu *userUsecase) ListUsers(ctx context.Context, filter domain.UserQueryFilter) (*domain.PagedResult[*domain.User], error) {
+	ctx, cancel := context.WithTimeout(ctx, uu.contextTimeout)
+	defer cancel()
+	return uu.userRepository.Query(ctx, filter)
+}
+
+func (uu *userUsecase) GetUserByID(ctx context.Context, id string) (*domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, uu.contextTimeout)
+	defer cancel()
+	return uu.userRepository.GetByID(ctx, id)
+}
+
+func (uu *userUsecase) DeleteUser(ctx context.Context, id string, currentUserID string) error {
+	ctx, cancel := context.WithTimeout(ctx, uu.contextTimeout)
+	defer cancel()
+
+	// 规则1: 不能删除自己
+	if id == currentUserID {
+		return domain.ErrCannotDeleteSelf
+	}
+
+	// 1. 获取目标用户信息
+	user, err := uu.userRepository.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to get user for deletion: %w", err)
+	}
+
+	// 规则2: 不能删除 isAdmin 管理员
+	if user.IsAdmin {
+		return domain.ErrCannotDeleteAdmin
+	}
+
+	slog.Info("user deletion started", "operator_id", currentUserID, "username", user.Username, "user_id", id)
+
+	if err := uu.userRepository.Delete(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete user from database: %w", err)
+	}
+	return nil
+}
+
+func (uu *userUsecase) UpdateUserProfile(ctx context.Context, userID string, updates domain.ProfileUpdate) error {
+	ctx, cancel := context.WithTimeout(ctx, uu.contextTimeout)
+	defer cancel()
+
+	// Get existing user
+	user, err := uu.userRepository.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// 管理员账户不可被普通接口编辑。
+	if user.IsAdmin {
+		return domain.ErrCannotEditAdmin
+	}
+
+	// Update the user with new data
+	if updates.Name != "" {
+		user.Username = updates.Name
+	}
+	// Note: Avatar field is not in the current User struct, but can be added later
+
+	return uu.userRepository.Update(ctx, user)
+}
+
+func (uu *userUsecase) UpdateUserPassword(ctx context.Context, userID string, passwordUpdate domain.PasswordUpdate) error {
+	ctx, cancel := context.WithTimeout(ctx, uu.contextTimeout)
+	defer cancel()
+
+	// Get existing user
+	user, err := uu.userRepository.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// 管理员账户不走"用户自助修改密码"路径；密码应通过 /auth 流程或 admin 重置处理。
+	if user.IsAdmin {
+		return domain.ErrCannotEditAdmin
+	}
+
+	// Verify current password
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(passwordUpdate.CurrentPassword)); err != nil {
+		return domain.ErrInvalidPassword
+	}
+
+	// Hash new password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(passwordUpdate.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	// Update password
+	user.Password = string(hashedPassword)
+	return uu.userRepository.Update(ctx, user)
+}
+
+func (uu *userUsecase) UpdateUserPartial(ctx context.Context, userID string, updates domain.UserUpdateRequest) error {
+	ctx, cancel := context.WithTimeout(ctx, uu.contextTimeout)
+	defer cancel()
+
+	// Get existing user
+	user, err := uu.userRepository.GetByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// 管理员账户不可被普通编辑接口修改。
+	if user.IsAdmin {
+		return domain.ErrCannotEditAdmin
+	}
+
+	// Apply partial updates
+	if updates.Username != nil {
+		user.Username = *updates.Username
+	}
+	if updates.Email != nil {
+		user.Email = *updates.Email
+	}
+	if updates.Phone != nil {
+		user.Phone = *updates.Phone
+	}
+	if updates.Status != nil {
+		user.Status = *updates.Status
+	}
+	if updates.Avatar != nil {
+		user.Avatar = *updates.Avatar
+	}
+	if updates.Password != nil && *updates.Password != "" {
+		// 🔒 加密密码
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(*updates.Password), bcrypt.DefaultCost)
+		if err != nil {
+			return err
+		}
+		user.Password = string(hashedPassword)
+	}
+	if updates.DepartmentID != nil {
+		user.DepartmentID = updates.DepartmentID
+	}
+
+	if updates.RoleIDs != nil {
+		// An explicit empty array clears all roles; an omitted field leaves roles unchanged.
+		return uu.userRepository.UpdateWithRoles(ctx, user, updates.RoleIDs)
+	}
+	if updates.Status != nil {
+		return uu.userRepository.UpdateWithAuthorization(ctx, user)
+	}
+	return uu.userRepository.Update(ctx, user)
+}
+
+// GetUserRoles 获取用户角色
+func (uu *userUsecase) GetUserRoles(ctx context.Context, userID string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, uu.contextTimeout)
+	defer cancel()
+
+	roleIDs, err := uu.userRepository.GetRoleIDs(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return roleIDs, nil
+}

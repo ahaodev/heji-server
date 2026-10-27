@@ -1,0 +1,75 @@
+import { getRouteApi } from '@tanstack/react-router'
+import type { NavigateFn } from '@/hooks/use-table-url-state'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/layout/page-header'
+import { DictTypesTable } from './components/dict-types-table'
+import { DictsDialogs } from './components/dicts-dialogs'
+import { DictsPrimaryButtons } from './components/dicts-primary-buttons'
+import { DictsProvider } from './components/dicts-provider'
+import { useDictTypes } from './hooks/use-dict-types'
+
+const route = getRouteApi('/_authenticated/system/dict')
+
+export function Dicts() {
+  const search = route.useSearch()
+  const navigate = route.useNavigate()
+
+  const queryParams = {
+    page: search.page || 1,
+    page_size: search.page_size || 10,
+    keyword: search.search || undefined,
+    status: search.status || undefined,
+  }
+
+  const { data: dictTypesData, isLoading, error } = useDictTypes(queryParams)
+
+  const navigateWrapper: NavigateFn = ({ search: searchUpdate, replace }) => {
+    navigate({ search: searchUpdate, replace })
+  }
+
+  return (
+    <DictsProvider>
+      <PageHeader fixed />
+
+      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
+        <div className='flex flex-wrap items-end justify-between gap-2'>
+          <div>
+            <h2 className='text-2xl font-bold tracking-tight'>字典管理</h2>
+            <p className='text-muted-foreground'>
+              管理系统字典类型和字典项，配置业务数据字典。
+            </p>
+          </div>
+          <DictsPrimaryButtons />
+        </div>
+
+        {isLoading ? (
+          <div className='space-y-4'>
+            <div className='flex items-center justify-between'>
+              <Skeleton className='h-8 w-48' />
+              <Skeleton className='h-10 w-32' />
+            </div>
+            <div className='space-y-2'>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className='h-16 w-full' />
+              ))}
+            </div>
+          </div>
+        ) : error ? (
+          <div className='text-muted-foreground flex h-32 items-center justify-center'>
+            加载字典数据失败，请重试
+          </div>
+        ) : (
+          <DictTypesTable
+            data={dictTypesData?.list || []}
+            search={search}
+            navigate={navigateWrapper}
+            totalCount={dictTypesData?.total || 0}
+          />
+        )}
+      </Main>
+
+      <DictsDialogs />
+    </DictsProvider>
+  )
+}

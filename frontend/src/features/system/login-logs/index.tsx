@@ -1,0 +1,74 @@
+import { getRouteApi } from '@tanstack/react-router'
+import type { NavigateFn } from '@/hooks/use-table-url-state'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/layout/page-header'
+import { LoginLogsTable } from './components/login-logs-table'
+import { LogsPrimaryButtons } from './components/logs-primary-buttons'
+import { useLoginLogs } from './hooks/use-login-logs'
+
+const route = getRouteApi('/_authenticated/system/login-logs')
+
+export function LoginLogs() {
+  const search = route.useSearch()
+  const navigate = route.useNavigate()
+
+  // Extract query parameters from URL search
+  const queryParams = {
+    page: search.page || 1,
+    page_size: search.pageSize || 10,
+    email: search.email || undefined,
+    status:
+      search.status && search.status.length > 0
+        ? (search.status[0] as 'success' | 'failed')
+        : undefined,
+  }
+
+  const { data: logsData, isLoading, error } = useLoginLogs(queryParams)
+
+  // Create a wrapper function to match NavigateFn type
+  const navigateWrapper: NavigateFn = ({ search: searchUpdate, replace }) => {
+    navigate({ search: searchUpdate, replace })
+  }
+
+  return (
+    <>
+      <PageHeader fixed />
+
+      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
+        <div className='flex flex-wrap items-end justify-between gap-2'>
+          <div>
+            <h2 className='text-2xl font-bold tracking-tight'>登录日志</h2>
+            <p className='text-muted-foreground'>查看和管理系统登录日志记录</p>
+          </div>
+          <LogsPrimaryButtons />
+        </div>
+
+        {isLoading ? (
+          <div className='space-y-4'>
+            <div className='flex items-center justify-between'>
+              <Skeleton className='h-8 w-48' />
+              <Skeleton className='h-10 w-32' />
+            </div>
+            <div className='space-y-2'>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className='h-16 w-full' />
+              ))}
+            </div>
+          </div>
+        ) : error ? (
+          <div className='text-muted-foreground flex h-32 items-center justify-center'>
+            加载登录日志失败，请重试
+          </div>
+        ) : (
+          <LoginLogsTable
+            data={logsData?.list || []}
+            search={search}
+            navigate={navigateWrapper}
+            totalCount={logsData?.total || 0}
+          />
+        )}
+      </Main>
+    </>
+  )
+}

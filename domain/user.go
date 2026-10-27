@@ -1,0 +1,111 @@
+package domain
+
+import (
+	"context"
+	"errors"
+	"time"
+)
+
+var (
+	ErrUserNotFound      = errors.New("用户不存在")
+	ErrUserExists        = errors.New("用户名、邮箱或手机号已被使用")
+	ErrInvalidPassword   = errors.New("invalid password")
+	ErrCannotDeleteSelf  = errors.New("不能删除自己")
+	ErrCannotDeleteAdmin = errors.New("不能删除管理员账户")
+	ErrCannotEditAdmin   = errors.New("不能编辑管理员账户")
+	ErrUserDisabled      = errors.New("账户已停用或未启用")
+)
+
+// User 结构体定义了用户的基本信息 (单租户架构)
+type User struct {
+	ID             string     `json:"id"`
+	Username       string     `json:"username"`
+	Nickname       string     `json:"nickname"`
+	Email          string     `json:"email"`
+	Phone          string     `json:"phone,omitempty"`
+	Password       string     `json:"-"`
+	Source         string     `json:"source,omitempty"`
+	Avatar         string     `json:"avatar,omitempty"`
+	IsAdmin        bool       `json:"is_admin,omitempty"`
+	Status         string     `json:"status"`              // active, inactive, invited, suspended
+	Roles          []string   `json:"role,omitempty"`      // 用户的角色
+	IsActive       bool       `json:"is_active,omitempty"` // 用户是否活跃
+	DepartmentID   *string    `json:"department_id,omitempty"`
+	DepartmentName string     `json:"department_name,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	InvitedAt      *time.Time `json:"invited_at,omitempty"`
+	InvitedBy      string     `json:"invited_by,omitempty"`
+}
+
+// CreateUserRequest 创建用户请求 (单租户架构)
+type CreateUserRequest struct {
+	Username     string   `json:"username" binding:"required"`
+	Email        string   `json:"email" binding:"required,email"`
+	Phone        string   `json:"phone,omitempty"`
+	Password     string   `json:"password" binding:"required"`
+	Status       string   `json:"status,omitempty"`        // active, inactive, invited, suspended
+	RoleIDs      []string `json:"role_ids,omitempty"`      // 用户角色ID列表
+	DepartmentID *string  `json:"department_id,omitempty"` // 所属部门ID
+}
+
+// InviteUserRequest 邀请用户请求 (单租户架构)
+type InviteUserRequest struct {
+	Email   string   `json:"email" binding:"required,email,max=100"`
+	RoleIDs []string `json:"role_ids" binding:"required,min=1,dive,required"`
+	Message string   `json:"message,omitempty" binding:"max=1000"`
+}
+
+// UserUpdateRequest 更新用户请求
+type UserUpdateRequest struct {
+	Username     *string  `json:"username,omitempty"`
+	Email        *string  `json:"email,omitempty"`
+	Phone        *string  `json:"phone,omitempty"`
+	Password     *string  `json:"password,omitempty"`
+	Status       *string  `json:"status,omitempty"`
+	Avatar       *string  `json:"avatar,omitempty"`
+	RoleIDs      []string `json:"role_ids,omitempty"`
+	DepartmentID *string  `json:"department_id,omitempty"`
+}
+
+// UserPagedResult 用户分页查询结果
+type UserPagedResult = PagedResult[*User]
+
+// UserQueryFilter 用户查询过滤器 (单租户架构)
+type UserQueryFilter struct {
+	Status       string `json:"status,omitempty"`
+	Role         string `json:"role,omitempty"`
+	Username     string `json:"username,omitempty"`
+	Email        string `json:"email,omitempty"`
+	Keyword      string `json:"keyword,omitempty"` // 模糊匹配 username / nickname / email（CLI 统一约定）
+	IsAdmin      *bool  `json:"is_admin,omitempty"`
+	IncludeRoles bool   `json:"include_roles,omitempty"`
+	DepartmentID string `json:"department_id,omitempty" form:"department_id"`
+	QueryParams
+}
+
+type UserRepository interface {
+	Create(ctx context.Context, user *User) error
+	CreateWithRoles(ctx context.Context, user *User, roleIDs []string) error
+	GetByID(ctx context.Context, id string) (*User, error)
+	GetByIdentifier(ctx context.Context, identifier string) (*User, error)
+	Query(ctx context.Context, filter UserQueryFilter) (*PagedResult[*User], error)
+	Update(ctx context.Context, user *User) error
+	UpdateWithAuthorization(ctx context.Context, user *User) error
+	UpdateWithRoles(ctx context.Context, user *User, roleIDs []string) error
+	UpdateIdentityProfile(ctx context.Context, userID, nickname, avatar string) error
+	Delete(ctx context.Context, id string) error
+	GetStatusByID(ctx context.Context, id string) (string, error)
+	GetRoleIDs(ctx context.Context, id string) ([]string, error)
+}
+
+type UserUseCase interface {
+	CreateUser(ctx context.Context, request *CreateUserRequest) (*User, error)
+	GetUserByID(ctx context.Context, id string) (*User, error)
+	ListUsers(ctx context.Context, filter UserQueryFilter) (*PagedResult[*User], error)
+	UpdateUserProfile(ctx context.Context, userID string, updates ProfileUpdate) error
+	UpdateUserPassword(ctx context.Context, userID string, passwordUpdate PasswordUpdate) error
+	UpdateUserPartial(ctx context.Context, userID string, updates UserUpdateRequest) error
+	DeleteUser(ctx context.Context, id string, currentUserID string) error
+	GetUserRoles(ctx context.Context, userID string) ([]string, error)
+}

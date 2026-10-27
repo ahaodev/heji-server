@@ -1,0 +1,126 @@
+package repository
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"shadmin/domain"
+	"shadmin/ent"
+	"shadmin/ent/useridentity"
+)
+
+type entUserIdentityRepository struct {
+	client *ent.Client
+}
+
+// NewUserIdentityRepository 构造第三方身份关联的 ent 仓储实现
+func NewUserIdentityRepository(client *ent.Client) domain.UserIdentityRepository {
+	return &entUserIdentityRepository{client: client}
+}
+
+// entUserIdentityToDomain 把 ent.UserIdentity 转成 domain.UserIdentity
+func entUserIdentityToDomain(a *ent.UserIdentity) *domain.UserIdentity {
+	if a == nil {
+		return nil
+	}
+	return &domain.UserIdentity{
+		ID:              a.ID,
+		UserID:          a.UserID,
+		Provider:        a.Provider,
+		ProviderSubject: a.ProviderSubject,
+		CreatedAt:       a.CreatedAt,
+		UpdatedAt:       a.UpdatedAt,
+	}
+}
+
+// FindByProviderAndSubject 通过 provider + 第三方用户ID 查找关联记录。
+// 未找到时返回 (nil, nil)，调用方据此走"新建独立用户 + 建关联"分支；
+// 注意：不存在按 email 匹配已有用户的分支，这是刻意的隔离策略。
+func (r *entUserIdentityRepository) FindByProviderAndSubject(ctx context.Context, provider, subject string) (*domain.UserIdentity, error) {
+	if provider == "" || subject == "" {
+		return nil, nil
+	}
+
+	a, err := clientFromContext(ctx, r.client).UserIdentity.Query().
+		Where(
+			useridentity.Provider(provider),
+			useridentity.ProviderSubject(subject),
+		).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("query user identity: %w", err)
+	}
+	return entUserIdentityToDomain(a), nil
+}
+
+// Upsert 以 (provider, provider_subject) 为唯一键写入关联记录：
+// 不存在则新建；已存在则只更新 user_id（该表无 email/name/avatar 等资料列）。
+func (r *entUserIdentityRepository) Upsert(ctx context.Context, account *domain.UserIdentity) error {
+	if account == nil {
+		return fmt.Errorf("user identity is nil")
+	}
+	if account.Provider == "" || account.ProviderSubject == "" {
+		return fmt.Errorf("provider and provider_subject are required")
+	}
+
+	existing, err := clientFromContext(ctx, r.client).UserIdentity.Query().
+		Where(
+			useridentity.Provider(account.Provider),
+			useridentity.ProviderSubject(account.ProviderSubject),
+		).
+		Only(ctx)
+	if err != nil && !ent.IsNotFound(err) {
+		return fmt.Errorf("query existing user identity: %w", err)
+	}
+
+	if ent.IsNotFound(err) || existing == nil {
+		created, createErr := clientFromContext(ctx, r.client).UserIdentity.Create().
+			SetUserID(account.UserID).
+			SetProvider(account.Provider).
+			SetProviderSubject(account.ProviderSubject).
+			Save(ctx)
+		if createErr != nil {
+			if isUniqueConstraintError(createErr) {
+				return fmt.Errorf("%w: %w", domain.ErrUserIdentityConflict, createErr)
+			}
+			return fmt.Errorf("create user identity: %w", createErr)
+		}
+		account.ID = created.ID
+		account.CreatedAt = created.CreatedAt
+		account.UpdatedAt = created.UpdatedAt
+		return nil
+	}
+
+	return r.updateOne(ctx, existing.ID, account)
+}
+
+// isUniqueConstraintError recognizes the portable unique-constraint messages
+// emitted by the SQLite, PostgreSQL, and MySQL drivers. Other constraint
+// failures must not trigger the identity-race retry in the use case.
+func isUniqueConstraintError(err error) bool {
+	if !ent.IsConstraintError(err) {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "unique constraint") ||
+		strings.Contains(message, "unique violation") ||
+		strings.Contains(message, "duplicate key") ||
+		strings.Contains(message, "duplicate entry")
+}
+
+func (r *entUserIdentityRepository) updateOne(ctx context.Context, id string, account *domain.UserIdentity) error {
+	updated, err := clientFromContext(ctx, r.client).UserIdentity.UpdateOneID(id).
+		SetUserID(account.UserID).
+		Save(ctx)
+	if err != nil {
+		return fmt.Errorf("update user identity: %w", err)
+	}
+	account.ID = updated.ID
+	account.CreatedAt = updated.CreatedAt
+	account.UpdatedAt = updated.UpdatedAt
+	return nil
+}

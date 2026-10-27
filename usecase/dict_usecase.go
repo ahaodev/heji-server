@@ -1,0 +1,188 @@
+package usecase
+
+import (
+	"context"
+	"shadmin/domain"
+	"shadmin/internal/constants"
+	"time"
+)
+
+type dictUsecase struct {
+	dictRepository domain.DictRepository
+	contextTimeout time.Duration
+}
+
+func validateDictStatus(status string) error {
+	if status != domain.StatusActive && status != domain.StatusInactive {
+		return domain.ErrInvalidDictStatus
+	}
+	return nil
+}
+
+func NewDictUsecase(dictRepository domain.DictRepository, timeout time.Duration) domain.DictUseCase {
+	return &dictUsecase{
+		dictRepository: dictRepository,
+		contextTimeout: timeout,
+	}
+}
+
+// 字典类型相关业务逻辑
+
+func (du *dictUsecase) CreateDictType(ctx context.Context, request *domain.CreateDictTypeRequest) (*domain.DictType, error) {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	// 设置默认状态
+	if request.Status == "" {
+		request.Status = constants.StatusActive
+	}
+	if err := validateDictStatus(request.Status); err != nil {
+		return nil, err
+	}
+
+	// 创建域模型
+	dictType := &domain.DictType{
+		Code:   request.Code,
+		Name:   request.Name,
+		Status: request.Status,
+		Remark: request.Remark,
+	}
+
+	// 调用repository创建
+	err := du.dictRepository.CreateType(ctx, dictType)
+	if err != nil {
+		return nil, err
+	}
+
+	return dictType, nil
+}
+
+func (du *dictUsecase) GetDictTypeByID(ctx context.Context, id string) (*domain.DictType, error) {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	return du.dictRepository.GetTypeByID(ctx, id)
+}
+
+func (du *dictUsecase) GetDictTypeByCode(ctx context.Context, code string) (*domain.DictType, error) {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	return du.dictRepository.GetTypeByCode(ctx, code)
+}
+
+func (du *dictUsecase) ListDictTypes(ctx context.Context, params domain.DictTypeQueryParams) (*domain.PagedResult[*domain.DictType], error) {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	if params.Status != "" {
+		if err := validateDictStatus(params.Status); err != nil {
+			return nil, err
+		}
+	}
+
+	return du.dictRepository.FetchTypes(ctx, params)
+}
+
+func (du *dictUsecase) UpdateDictType(ctx context.Context, id string, updates domain.UpdateDictTypeRequest) error {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	if updates.Status != nil {
+		if err := validateDictStatus(*updates.Status); err != nil {
+			return err
+		}
+	}
+
+	return du.dictRepository.UpdateType(ctx, id, updates)
+}
+
+func (du *dictUsecase) DeleteDictType(ctx context.Context, id string) error {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	return du.dictRepository.DeleteType(ctx, id)
+}
+
+// 字典项相关业务逻辑
+
+func (du *dictUsecase) CreateDictItem(ctx context.Context, request *domain.CreateDictItemRequest) (*domain.DictItem, error) {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	// 设置默认状态
+	if request.Status == "" {
+		request.Status = constants.StatusActive
+	}
+	if err := validateDictStatus(request.Status); err != nil {
+		return nil, err
+	}
+
+	// 创建域模型
+	dictItem := &domain.DictItem{
+		TypeID:    request.TypeID,
+		Label:     request.Label,
+		Value:     request.Value,
+		Sort:      request.Sort,
+		IsDefault: request.IsDefault,
+		Status:    request.Status,
+		Color:     request.Color,
+		Remark:    request.Remark,
+	}
+
+	// 调用repository创建
+	if err := du.dictRepository.CreateItem(ctx, dictItem); err != nil {
+		return nil, err
+	}
+
+	return dictItem, nil
+}
+
+func (du *dictUsecase) GetDictItemByID(ctx context.Context, id string) (*domain.DictItem, error) {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	return du.dictRepository.GetItemByID(ctx, id)
+}
+
+func (du *dictUsecase) ListDictItems(ctx context.Context, params domain.DictItemQueryParams) (*domain.PagedResult[*domain.DictItem], error) {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	if params.Status != "" {
+		if err := validateDictStatus(params.Status); err != nil {
+			return nil, err
+		}
+	}
+
+	return du.dictRepository.FetchItems(ctx, params)
+}
+
+func (du *dictUsecase) UpdateDictItem(ctx context.Context, id string, updates domain.UpdateDictItemRequest) error {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	if updates.Status != nil {
+		if err := validateDictStatus(*updates.Status); err != nil {
+			return err
+		}
+	}
+
+	return du.dictRepository.UpdateItem(ctx, id, updates)
+}
+
+func (du *dictUsecase) DeleteDictItem(ctx context.Context, id string) error {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	return du.dictRepository.DeleteItem(ctx, id)
+}
+
+// 便捷查询
+
+func (du *dictUsecase) GetActiveItemsByTypeCode(ctx context.Context, typeCode string) ([]*domain.DictItem, error) {
+	ctx, cancel := context.WithTimeout(ctx, du.contextTimeout)
+	defer cancel()
+
+	return du.dictRepository.GetItemsByTypeCode(ctx, typeCode, constants.StatusActive)
+}

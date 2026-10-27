@@ -1,0 +1,208 @@
+import { registerAuthStoreReset } from '@/services/config'
+import { getProfile } from '@/services/profileApi'
+import { type User } from '@/types/user'
+import { create } from 'zustand'
+import { menuService } from '@/lib/menu-service'
+import {
+  getAccessToken,
+  setAccessToken as persistAccessToken,
+  getRefreshToken,
+  setRefreshToken as persistRefreshToken,
+  removeAllTokens,
+} from '@/lib/token-storage'
+
+export interface AuthUser {
+  accountNo: string
+  email: string
+  role: string[]
+  exp: number
+}
+
+export interface UserPermissions {
+  permissions: string[][]
+  roles: string[]
+  menus: string[]
+  is_admin: boolean
+}
+
+interface AuthState {
+  auth: {
+    user: AuthUser | null
+    setUser: (user: AuthUser | null) => void
+    profile: User | null
+    setProfile: (profile: User | null) => void
+    isLoadingProfile: boolean
+    fetchProfile: () => Promise<void>
+    accessToken: string
+    setAccessToken: (accessToken: string) => void
+    resetAccessToken: () => void
+    refreshToken: string
+    setRefreshToken: (refreshToken: string) => void
+    permissions: UserPermissions | null
+    setPermissions: (permissions: UserPermissions | null) => void
+    reset: () => void
+    clearSidebarCache: () => void
+  }
+}
+
+// Helper function to decode JWT payload
+function decodeJwt(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length < 2) return null
+    const base64Url = parts[1]
+    // base64url -> base64
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    // pad base64 string
+    const pad = base64.length % 4
+    const padded = base64 + (pad ? '='.repeat(4 - pad) : '')
+    const json = decodeURIComponent(
+      atob(padded)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    )
+    return JSON.parse(json)
+  } catch (e) {
+    console.error('Failed to decode JWT', e)
+    return null
+  }
+}
+
+export const useAuthStore = create<AuthState>()((set, get) => {
+  const initToken = getAccessToken()
+  const initRefreshToken = getRefreshToken()
+
+  // Initialize user from lightweight JWT token (identity only)
+  let initUser: AuthUser | null = null
+  if (initToken) {
+    const tokenPayload = decodeJwt(initToken)
+    if (tokenPayload) {
+      initUser = {
+        accountNo: String(
+          tokenPayload.name ?? tokenPayload.username ?? tokenPayload.id ?? ''
+        ),
+        email: String(tokenPayload.email ?? ''),
+        role: Array.isArray(tokenPayload.role)
+          ? (tokenPayload.role as string[])
+          : ['authenticated_user'],
+        exp:
+          typeof tokenPayload.exp === 'number'
+            ? tokenPayload.exp
+            : Date.now() + 24 * 60 * 60 * 1000,
+      }
+    }
+  }
+
+  return {
+    auth: {
+      user: initUser,
+      setUser: (user) =>
+        set((state) => ({ ...state, auth: { ...state.auth, user } })),
+      profile: null,
+      setProfile: (profile) =>
+        set((state) => ({ ...state, auth: { ...state.auth, profile } })),
+      isLoadingProfile: false,
+      fetchProfile: async () => {
+        const currentState = get()
+
+        // Prevent duplicate calls if already loading, already have profile, or no token
+        if (
+          currentState.auth.isLoadingProfile ||
+          currentState.auth.profile ||
+          !currentState.auth.accessToken
+        ) {
+          return
+        }
+
+        try {
+          set((state) => ({
+            ...state,
+            auth: { ...state.auth, isLoadingProfile: true },
+          }))
+          const profile = await getProfile()
+          set((state) => ({
+            ...state,
+            auth: {
+              ...state.auth,
+              profile,
+              isLoadingProfile: false,
+            },
+          }))
+        } catch (error: unknown) {
+          // eslint-disable-next-line no-console
+          console.error('Failed to fetch profile:', error)
+          set((state) => ({
+            ...state,
+            auth: { ...state.auth, isLoadingProfile: false },
+          }))
+
+          // Sign out if user not found (404)
+          if (error && typeof error === 'object' && 'response' in error) {
+            const axiosErr = error as { response?: { status?: number } }
+            if (axiosErr.response?.status === 404) {
+              get().auth.reset()
+            }
+          }
+        }
+      },
+      accessToken: initToken,
+      setAccessToken: (accessToken) =>
+        set((state) => {
+          persistAccessToken(accessToken)
+          return { ...state, auth: { ...state.auth, accessToken } }
+        }),
+      resetAccessToken: () =>
+        set((state) => {
+          removeAllTokens()
+          return { ...state, auth: { ...state.auth, accessToken: '' } }
+        }),
+      refreshToken: initRefreshToken,
+      setRefreshToken: (refreshToken) =>
+        set((state) => {
+          persistRefreshToken(refreshToken)
+          return { ...state, auth: { ...state.auth, refreshToken } }
+        }),
+      permissions: null,
+      setPermissions: (permissions) =>
+        set((state) => ({ ...state, auth: { ...state.auth, permissions } })),
+      reset: () =>
+        set((state) => {
+          removeAllTokens()
+
+          // 清除侧边栏缓存
+          try {
+            menuService.clearCache()
+          } catch (error) {
+            console.warn('Failed to clear menu cache:', error)
+          }
+
+          return {
+            ...state,
+            auth: {
+              ...state.auth,
+              user: null,
+              profile: null,
+              isLoadingProfile: false,
+              accessToken: '',
+              refreshToken: '',
+              permissions: null,
+            },
+          }
+        }),
+      clearSidebarCache: () => {
+        // 清除侧边栏相关缓存的辅助方法
+        try {
+          menuService.clearCache()
+        } catch (error) {
+          console.warn('Failed to clear menu cache:', error)
+        }
+      },
+    },
+  }
+})
+
+// Register store reset with the axios interceptor (breaks circular import)
+registerAuthStoreReset(() => {
+  useAuthStore.getState().auth.reset()
+})

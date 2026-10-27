@@ -1,0 +1,82 @@
+import { getIdentityLoginHref } from '@/services/authApi'
+import { Loader2 } from 'lucide-react'
+import { IconGithub } from '@/assets/brand-icons/icon-github'
+import { IconGmail } from '@/assets/brand-icons/icon-gmail'
+import { Button } from '@/components/ui/button'
+import { useIdentityProviders } from '../hooks/use-identity-providers'
+
+const PROVIDER_ICON_CLASS_NAME = 'size-4 shrink-0'
+
+function providerIcon(provider: string) {
+  switch (provider) {
+    case 'github':
+      return <IconGithub className={PROVIDER_ICON_CLASS_NAME} />
+    case 'google':
+      return <IconGmail className={PROVIDER_ICON_CLASS_NAME} />
+    default:
+      return null
+  }
+}
+
+function providerLabel(provider: string) {
+  switch (provider) {
+    case 'github':
+      return 'GitHub'
+    case 'google':
+      return 'Google'
+    default:
+      return provider
+  }
+}
+
+// IdentityProvider 拉取后端已启用的第三方登录 provider 列表，
+// 仅在后端启用至少一个 provider 时显示对应按钮；未启用时整组不显示。
+export function IdentityLoginButtons() {
+  const { data: providers = [], isError, isLoading } = useIdentityProviders()
+
+  if (isError) return null
+
+  if (isLoading) {
+    // 拉取中：占位避免布局抖动
+    return (
+      <div className='flex items-center justify-center'>
+        <Loader2 className='text-muted-foreground size-4 animate-spin' />
+      </div>
+    )
+  }
+
+  if (providers.length === 0) return null
+
+  return (
+    <div className='mt-4 space-y-3'>
+      <div className='flex items-center gap-3'>
+        <div className='bg-border h-px flex-1' />
+        <span className='text-muted-foreground text-sm'>OR</span>
+        <div className='bg-border h-px flex-1' />
+      </div>
+      <div className='flex flex-wrap justify-center gap-2'>
+        {providers.map((provider) => (
+          <Button
+            key={provider}
+            type='button'
+            variant='outline'
+            className='flex min-w-35 flex-1 justify-center gap-2'
+            // 直接跳转到后端 OAuth 入口；后端负责重定向到 provider 授权页
+            asChild
+          >
+            <a
+              href={getIdentityLoginHref(provider)}
+              className='flex w-full items-center justify-center gap-2'
+              aria-label={`Continue with ${providerLabel(provider)}`}
+            >
+              <span className='flex items-center gap-2'>
+                {providerIcon(provider)}
+                <span>{providerLabel(provider)}</span>
+              </span>
+            </a>
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+}

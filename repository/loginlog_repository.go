@@ -1,0 +1,148 @@
+package repository
+
+import (
+	"context"
+	"shadmin/domain"
+	"shadmin/ent"
+	"shadmin/ent/loginlog"
+	"shadmin/ent/predicate"
+	"shadmin/internal/constants"
+)
+
+// Helper function to convert domain status string to ent status enum
+func domainStatusToEntLoginLogStatus(status string) loginlog.Status {
+	switch status {
+	case constants.StatusSuccess:
+		return loginlog.StatusSuccess
+	case constants.StatusFailed:
+		return loginlog.StatusFailed
+	default:
+		return loginlog.StatusFailed
+	}
+}
+
+// Helper function to convert ent status enum to domain status string
+func entLoginLogStatusToDomainStatus(status loginlog.Status) string {
+	return string(status)
+}
+
+type entLoginLogRepository struct {
+	client *ent.Client
+}
+
+func NewLoginLogRepository(client *ent.Client) domain.LoginLogRepository {
+	return &entLoginLogRepository{
+		client: client,
+	}
+}
+
+func (lr *entLoginLogRepository) Create(ctx context.Context, log *domain.LoginLog) error {
+	status := domainStatusToEntLoginLogStatus(log.Status)
+
+	created, err := clientFromContext(ctx, lr.client).LoginLog.
+		Create().
+		SetNillableEmail(emptyToNil(log.Email)).
+		SetLoginIP(log.LoginIP).
+		SetUserAgent(log.UserAgent).
+		SetNillableBrowser(&log.Browser).
+		SetNillableOs(&log.OS).
+		SetNillableDevice(&log.Device).
+		SetStatus(status).
+		SetNillableSource(emptyToNil(log.Source)).
+		SetNillableFailureReason(&log.FailureReason).
+		SetLoginTime(log.LoginTime).
+		Save(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	log.ID = created.ID
+	log.Status = entLoginLogStatusToDomainStatus(created.Status)
+	log.LoginTime = created.LoginTime
+	return nil
+}
+
+func (lr *entLoginLogRepository) Query(ctx context.Context, filter domain.LoginLogQueryFilter) (*domain.LoginLogPagedResult, error) {
+	// 构建基础查询
+	// 构建查询条件
+	var predicates []predicate.LoginLog
+	if filter.Email != "" {
+		predicates = append(predicates, loginlog.EmailContains(filter.Email))
+	}
+	if filter.LoginIP != "" {
+		predicates = append(predicates, loginlog.LoginIPContains(filter.LoginIP))
+	}
+	if filter.Status != "" {
+		predicates = append(predicates, loginlog.StatusEQ(domainStatusToEntLoginLogStatus(filter.Status)))
+	}
+	if filter.Source != "" {
+		predicates = append(predicates, loginlog.SourceEQ(filter.Source))
+	}
+	if filter.Browser != "" {
+		predicates = append(predicates, loginlog.BrowserContains(filter.Browser))
+	}
+	if filter.OS != "" {
+		predicates = append(predicates, loginlog.OsContains(filter.OS))
+	}
+	if filter.StartTime != nil {
+		predicates = append(predicates, loginlog.LoginTimeGTE(*filter.StartTime))
+	}
+	if filter.EndTime != nil {
+		predicates = append(predicates, loginlog.LoginTimeLTE(*filter.EndTime))
+	}
+	baseQuery := clientFromContext(ctx, lr.client).LoginLog.Query().Where(predicates...)
+
+	// 获取总数
+	total, err := baseQuery.Clone().Count(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 应用排序（默认按登录时间倒序）
+	if filter.SortBy != "" {
+		baseQuery = baseQuery.Order(ApplySorting(filter.SortBy, filter.Order, map[string]string{
+			"email":    loginlog.FieldEmail,
+			"login_ip": loginlog.FieldLoginIP,
+			"status":   loginlog.FieldStatus,
+		}, loginlog.FieldLoginTime))
+	} else {
+		// 默认按登录时间倒序
+		baseQuery = baseQuery.Order(ent.Desc(loginlog.FieldLoginTime))
+	}
+
+	offset, limit := filter.Paginate()
+	baseQuery = baseQuery.Offset(offset).Limit(limit)
+	logs, err := baseQuery.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// 转换为 domain.LoginLog
+	var result []*domain.LoginLog
+	for _, log := range logs {
+		domainLog := &domain.LoginLog{
+			ID:            log.ID,
+			Email:         derefString(log.Email),
+			LoginIP:       log.LoginIP,
+			UserAgent:     log.UserAgent,
+			Browser:       log.Browser,
+			OS:            log.Os,
+			Device:        log.Device,
+			Status:        entLoginLogStatusToDomainStatus(log.Status),
+			Source:        log.Source,
+			FailureReason: log.FailureReason,
+			LoginTime:     log.LoginTime,
+		}
+		result = append(result, domainLog)
+	}
+
+	return domain.NewPagedResult(result, total, filter.Page, filter.PageSize), nil
+}
+
+func (lr *entLoginLogRepository) ClearAll(ctx context.Context) error {
+	_, err := clientFromContext(ctx, lr.client).LoginLog.
+		Delete().
+		Exec(ctx)
+	return err
+}

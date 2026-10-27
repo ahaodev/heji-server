@@ -1,0 +1,60 @@
+package middleware
+
+import (
+	"net/http"
+
+	"shadmin/domain"
+	"shadmin/internal/constants"
+	"shadmin/internal/contextutil"
+
+	"github.com/gin-gonic/gin"
+)
+
+// JwtAuthMiddleware 校验 access token 的合法性、黑名单状态，并把 claims 注入 gin context。
+func JwtAuthMiddleware(tokens domain.TokenIssuer, tokenBlacklist domain.TokenBlacklist) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authToken, ok := contextutil.BearerToken(c.Request.Header.Get(constants.Authorization))
+		if !ok {
+			c.JSON(http.StatusUnauthorized, domain.RespError("Not authorized"))
+			c.Abort()
+			return
+		}
+
+		claims, err := tokens.ParseAccessClaims(authToken)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, domain.RespError(err.Error()))
+			c.Abort()
+			return
+		}
+
+		if tokenBlacklist != nil {
+			// 黑名单以 jti 为键：无 jti 的令牌无法吊销，直接拒绝
+			if claims.JTI == "" {
+				c.JSON(http.StatusUnauthorized, domain.RespError("令牌无效"))
+				c.Abort()
+				return
+			}
+
+			revoked, rErr := tokenBlacklist.Exists(c.Request.Context(), claims.JTI)
+			if rErr != nil {
+				c.JSON(http.StatusUnauthorized, domain.RespError("令牌无法验证"))
+				c.Abort()
+				return
+			}
+			if revoked {
+				c.JSON(http.StatusUnauthorized, domain.RespError("令牌已登出"))
+				c.Abort()
+				return
+			}
+		}
+
+		c.Set(constants.UserID, claims.ID)
+		c.Set(constants.UserName, claims.Name)
+		c.Set(constants.UserEmail, claims.Email)
+		c.Set(constants.IsAdmin, claims.IsAdmin)
+		c.Set(constants.UserRoles, claims.Roles)
+		c.Set(constants.UserSubject, claims.Subject)
+
+		c.Next()
+	}
+}

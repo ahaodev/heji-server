@@ -1,0 +1,164 @@
+package controller
+
+import (
+	"net/http"
+	"shadmin/domain"
+
+	"github.com/gin-gonic/gin"
+)
+
+type DepartmentController struct {
+	DepartmentUseCase domain.DepartmentUseCase
+}
+
+// GetDepartmentList 按过滤条件返回扁平部门列表
+//
+//	@Summary		Get department list
+//	@Description	Retrieve departments as a flat list, filterable by name / status / keyword
+//	@Tags			Departments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			keyword	query		string										false	"Filter by department name or leader"
+//	@Param			name	query		string										false	"Filter by department name"
+//	@Param			status	query		string										false	"Filter by status (active/inactive)"
+//	@Success		200		{object}	domain.Response{data=[]domain.Department}	"Successfully retrieved departments"
+//	@Failure		500		{object}	domain.Response								"Internal server error"
+//	@Router			/system/department [get]
+func (dc *DepartmentController) GetDepartmentList(c *gin.Context) {
+	var filter domain.DepartmentQueryFilter
+	if !MustBindQuery(c, &filter) {
+		return
+	}
+
+	list, err := dc.DepartmentUseCase.FetchList(c.Request.Context(), filter)
+	if err != nil {
+		RespondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, domain.RespSuccess(list))
+}
+
+// GetDepartmentTree 获取部门树结构
+//
+//	@Summary		Get department tree
+//	@Description	Retrieve departments in hierarchical tree structure
+//	@Tags			Departments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Success		200	{object}	domain.Response{data=[]domain.Department}	"Successfully retrieved department tree"
+//	@Failure		500	{object}	domain.Response								"Internal server error"
+//	@Router			/system/department/tree [get]
+func (dc *DepartmentController) GetDepartmentTree(c *gin.Context) {
+	tree, err := dc.DepartmentUseCase.FetchTree(c.Request.Context())
+	if err != nil {
+		RespondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, domain.RespSuccess(tree))
+}
+
+// GetDepartment 获取单个部门
+//
+//	@Summary		Get department by ID
+//	@Description	Get a specific department by its ID
+//	@Tags			Departments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string									true	"Department ID"
+//	@Success		200	{object}	domain.Response{data=domain.Department}	"Successfully retrieved department"
+//	@Failure		404	{object}	domain.Response							"Department not found"
+//	@Router			/system/department/{id} [get]
+func (dc *DepartmentController) GetDepartment(c *gin.Context) {
+	id := c.Param("id")
+
+	dept, err := dc.DepartmentUseCase.GetByID(c.Request.Context(), id)
+	if err != nil {
+		RespondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, domain.RespSuccess(dept))
+}
+
+// CreateDepartment 创建部门
+//
+//	@Summary		Create department
+//	@Description	Create a new department
+//	@Tags			Departments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			department	body		domain.CreateDepartmentRequest			true	"Department information"
+//	@Success		201			{object}	domain.Response{data=domain.Department}	"Successfully created department"
+//	@Failure		400			{object}	domain.Response							"Bad request"
+//	@Failure		409			{object}	domain.Response							"Conflict - duplicate name"
+//	@Router			/system/department [post]
+func (dc *DepartmentController) CreateDepartment(c *gin.Context) {
+	var req domain.CreateDepartmentRequest
+	if !MustBindJSON(c, &req) {
+		return
+	}
+
+	dept, err := dc.DepartmentUseCase.Create(c.Request.Context(), &req)
+	if err != nil {
+		RespondError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, domain.RespSuccess(dept))
+}
+
+// UpdateDepartment 更新部门
+//
+//	@Summary		Update department
+//	@Description	Update a specific department by its ID
+//	@Tags			Departments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id			path		string									true	"Department ID"
+//	@Param			department	body		domain.UpdateDepartmentRequest			true	"Updated department information"
+//	@Success		200			{object}	domain.Response{data=domain.Department}	"Successfully updated department"
+//	@Failure		400			{object}	domain.Response							"Bad request"
+//	@Failure		404			{object}	domain.Response							"Department not found"
+//	@Failure		409			{object}	domain.Response							"Conflict - duplicate name or circular ref"
+//	@Router			/system/department/{id} [put]
+func (dc *DepartmentController) UpdateDepartment(c *gin.Context) {
+	id := c.Param("id")
+	var req domain.UpdateDepartmentRequest
+	if !MustBindJSON(c, &req) {
+		return
+	}
+
+	dept, err := dc.DepartmentUseCase.Update(c.Request.Context(), id, &req)
+	if err != nil {
+		RespondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, domain.RespSuccess(dept))
+}
+
+// DeleteDepartment 删除部门
+//
+//	@Summary		Delete department
+//	@Description	Delete a specific department by its ID
+//	@Tags			Departments
+//	@Accept			json
+//	@Produce		json
+//	@Security		BearerAuth
+//	@Param			id	path		string			true	"Department ID"
+//	@Success		200	{object}	domain.Response	"Successfully deleted department"
+//	@Failure		400	{object}	domain.Response	"Has children or users"
+//	@Failure		404	{object}	domain.Response	"Department not found"
+//	@Router			/system/department/{id} [delete]
+func (dc *DepartmentController) DeleteDepartment(c *gin.Context) {
+	id := c.Param("id")
+
+	err := dc.DepartmentUseCase.Delete(c.Request.Context(), id)
+	if err != nil {
+		RespondError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, domain.RespSuccess(nil))
+}

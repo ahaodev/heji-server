@@ -1,0 +1,61 @@
+package schema
+
+import (
+	"time"
+
+	"github.com/rs/xid"
+
+	"entgo.io/ent"
+	"entgo.io/ent/schema/edge"
+	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
+)
+
+// UserIdentity holds the schema definition for the UserIdentity entity.
+// 用于把第三方身份（如 Google / GitHub 用户ID）关联。
+type UserIdentity struct {
+	ent.Schema
+}
+
+// Fields of the UserIdentity.
+func (UserIdentity) Fields() []ent.Field {
+	return []ent.Field{
+		field.String("id").
+			DefaultFunc(func() string {
+				return xid.New().String()
+			}),
+		field.String("user_id").
+			MaxLen(32).
+			Comment("关联的用户ID"),
+		field.String("provider").
+			MaxLen(32).
+			Comment("第三方 provider 标识，如 google、github"),
+		field.String("provider_subject").
+			MaxLen(255).
+			Comment("第三方用户唯一标识（provider 内的用户ID）"),
+		field.Time("created_at").
+			Default(time.Now),
+		field.Time("updated_at").
+			Default(time.Now).
+			UpdateDefault(time.Now),
+	}
+}
+
+// Edges of the UserIdentity.
+func (UserIdentity) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.From("user", User.Type).
+			Ref("identity_accounts").
+			Field("user_id").
+			Unique().
+			Required(),
+	}
+}
+
+// Indexes of the UserIdentity.
+func (UserIdentity) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("provider", "provider_subject").Unique(),
+		index.Fields("user_id"),
+	}
+}

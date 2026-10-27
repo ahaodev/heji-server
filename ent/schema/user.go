@@ -1,0 +1,111 @@
+package schema
+
+import (
+	"time"
+
+	"github.com/rs/xid"
+
+	"entgo.io/ent"
+	"entgo.io/ent/schema/edge"
+	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
+)
+
+// User holds the schema definition for the User entity.
+type User struct {
+	ent.Schema
+}
+
+// Fields of the User.
+func (User) Fields() []ent.Field {
+	return []ent.Field{
+		field.String("id").
+			DefaultFunc(func() string {
+				return xid.New().String()
+			}),
+		field.String("username").
+			MaxLen(32).
+			Unique(),
+		field.String("nickname").
+			MaxLen(100).
+			Optional().
+			Comment("用户昵称"),
+		field.String("email").
+			MaxLen(100).
+			Optional().
+			Nillable().
+			Comment("邮箱；同渠道（source）内唯一，见复合唯一索引；空值存 NULL"),
+		field.Enum("source").
+			Values("shadmin", "github", "google").
+			Default("shadmin").
+			Comment("用户来源：shadmin-本地原生用户，github-第三方登录来源用户，google-第三方登录来源用户"),
+		field.String("phone").
+			MaxLen(20).
+			Unique().
+			Optional().
+			Nillable().
+			Comment("用户手机号码"),
+		field.Bool("is_admin").
+			Default(false).
+			Comment("是否为管理员"),
+		field.Enum("status").
+			Values("active", "inactive", "invited", "suspended").
+			Default("active").
+			Comment("用户状态：active-活跃，inactive-非活跃，invited-已邀请，suspended-已暂停"),
+		field.Time("invited_at").
+			Optional().
+			Comment("邀请时间"),
+		field.String("invited_by").
+			Optional().
+			Comment("邀请人ID"),
+		field.String("avatar").
+			MaxLen(255).
+			Optional().
+			Comment("用户头像；第三方登录头像在登录时同步写入此列（user_identity 为纯关联表，不存资料）"),
+		field.String("department_id").
+			Optional().
+			Nillable().
+			Comment("所属部门ID"),
+		field.String("password").
+			Sensitive().
+			Optional().
+			Nillable().
+			MaxLen(128).
+			Comment("密码哈希；第三方来源用户无本地密码，存 NULL"),
+		field.String("bio").
+			Optional().
+			MaxLen(160),
+		field.Time("created_at").
+			Default(time.Now),
+		field.Time("updated_at").
+			Default(time.Now).
+			UpdateDefault(time.Now),
+	}
+}
+
+// Edges of the User.
+func (User) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("roles", Role.Type).Comment("用户角色关系"),
+		edge.From("department", Department.Type).
+			Ref("users").
+			Field("department_id").
+			Unique(),
+		edge.To("identity_accounts", UserIdentity.Type).Comment("用户关联的第三方身份"),
+		edge.To("invitations", UserInvitation.Type).Comment("用户邀请记录"),
+	}
+}
+
+// Indexes of the User.
+func (User) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("username"),
+		// 同渠道（source）内 email 唯一：本地用户互不重复、oidc 用户互不重复；
+		// 跨渠道（shadmin / google / github）允许相同 email（oidc 用户不参与密码登录，无歧义）。
+		index.Fields("source", "email").
+			Unique(),
+		index.Fields("email"),
+		index.Fields("phone"),
+		index.Fields("status"),
+	}
+}

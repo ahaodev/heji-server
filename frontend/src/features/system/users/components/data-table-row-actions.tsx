@@ -1,0 +1,82 @@
+import { DotsHorizontalIcon } from '@radix-ui/react-icons'
+import { type Row } from '@tanstack/react-table'
+import { type User } from '@/types/user'
+import { Trash2, UserPen } from 'lucide-react'
+import { PERMISSIONS } from '@/constants/permissions'
+import { usePermission } from '@/hooks/usePermission'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useUsersDialog } from './users-provider'
+
+type DataTableRowActionsProps = {
+  row: Row<User>
+}
+
+export function DataTableRowActions({ row }: DataTableRowActionsProps) {
+  const { setOpen, setCurrentRow } = useUsersDialog()
+  const { hasPermission } = usePermission()
+
+  // 管理员账户锁定：UI 上禁止编辑/删除，避免和后端 403 冲突。
+  const isAdmin = row.original.is_admin === true
+
+  const canEdit = !isAdmin && hasPermission(PERMISSIONS.SYSTEM.USER.EDIT)
+  const canDelete = !isAdmin && hasPermission(PERMISSIONS.SYSTEM.USER.DELETE)
+
+  // If no permissions, don't render the dropdown
+  if (!canEdit && !canDelete) {
+    return null
+  }
+
+  return (
+    <>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant='ghost'
+            className='data-[state=open]:bg-muted flex h-8 w-8 p-0'
+          >
+            <DotsHorizontalIcon className='h-4 w-4' />
+            <span className='sr-only'>打开菜单</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align='end' className='w-[160px]'>
+          {canEdit && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(row.original)
+                setOpen('edit')
+              }}
+            >
+              编辑
+              <DropdownMenuShortcut>
+                <UserPen size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+          {canEdit && canDelete && <DropdownMenuSeparator />}
+          {canDelete && (
+            <DropdownMenuItem
+              onClick={() => {
+                setCurrentRow(row.original)
+                setOpen('delete')
+              }}
+              className='text-red-500!'
+            >
+              删除
+              <DropdownMenuShortcut>
+                <Trash2 size={16} />
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </>
+  )
+}

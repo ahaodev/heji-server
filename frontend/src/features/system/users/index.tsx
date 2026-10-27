@@ -1,0 +1,78 @@
+import { getRouteApi } from '@tanstack/react-router'
+import type { NavigateFn } from '@/hooks/use-table-url-state'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Main } from '@/components/layout/main'
+import { PageHeader } from '@/components/layout/page-header'
+import { UsersDialogs } from './components/users-dialogs'
+import { UsersPrimaryButtons } from './components/users-primary-buttons'
+import { UsersProvider } from './components/users-provider'
+import { UsersTable } from './components/users-table'
+import { useUsers } from './hooks/use-users'
+
+const route = getRouteApi('/_authenticated/system/user')
+
+export function Users() {
+  const search = route.useSearch()
+  const navigate = route.useNavigate()
+
+  // Extract query parameters from URL search
+  const queryParams = {
+    page: search.page || 1,
+    page_size: search.pageSize || 10,
+    keyword: search.username || undefined,
+    status: search.status
+      ? Array.isArray(search.status)
+        ? search.status.join(',')
+        : search.status
+      : undefined,
+  }
+
+  const { data: usersData, isLoading, error } = useUsers(queryParams)
+
+  // Create a wrapper function to match NavigateFn type
+  const navigateWrapper: NavigateFn = ({ search: searchUpdate, replace }) => {
+    navigate({ search: searchUpdate, replace })
+  }
+
+  return (
+    <UsersProvider>
+      <PageHeader fixed />
+
+      <Main className='flex flex-1 flex-col gap-4 sm:gap-6'>
+        <div className='flex flex-wrap items-end justify-between gap-2'>
+          <div>
+            <h2 className='text-2xl font-bold tracking-tight'>用户列表</h2>
+            <p className='text-muted-foreground'>在此管理您的用户及其角色。</p>
+          </div>
+          <UsersPrimaryButtons />
+        </div>
+        {isLoading ? (
+          <div className='space-y-4'>
+            <div className='flex items-center justify-between'>
+              <Skeleton className='h-8 w-48' />
+              <Skeleton className='h-10 w-32' />
+            </div>
+            <div className='space-y-2'>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className='h-16 w-full' />
+              ))}
+            </div>
+          </div>
+        ) : error ? (
+          <div className='text-muted-foreground flex h-32 items-center justify-center'>
+            加载用户数据失败，请重试
+          </div>
+        ) : (
+          <UsersTable
+            data={usersData?.list || []}
+            search={search}
+            navigate={navigateWrapper}
+            totalCount={usersData?.total || 0}
+          />
+        )}
+      </Main>
+
+      <UsersDialogs />
+    </UsersProvider>
+  )
+}

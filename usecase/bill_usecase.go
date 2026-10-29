@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -43,6 +44,17 @@ func (u *billUsecase) CreateBill(ctx context.Context, userID string, req *domain
 		return nil, err
 	}
 
+	// 客户端把新增与修改都发到 Create：同 ID 重复提交按更新处理，保证离线重试幂等
+	if req.ID != "" {
+		existing, err := u.billRepository.GetByID(ctx, req.ID)
+		switch {
+		case err == nil:
+			return u.applyUpdate(ctx, userID, existing, req)
+		case !errors.Is(err, domain.ErrBillNotFound):
+			return nil, err
+		}
+	}
+
 	bill := &domain.Bill{
 		ID:       req.ID,
 		BookID:   req.BookID,
@@ -59,6 +71,27 @@ func (u *billUsecase) CreateBill(ctx context.Context, userID string, req *domain
 	}
 
 	notifyBookChange(ctx, u.notifier, bill.BookID, userID, "ADD_BILL", "bill", bill)
+	return bill, nil
+}
+
+// applyUpdate 把 Create 请求当作全量更新写入已存在的账单。
+// 客户端不上传 images（字段被 Transient 掉），缺省时保留服务端已有的图片关联。
+func (u *billUsecase) applyUpdate(ctx context.Context, userID string, bill *domain.Bill, req *domain.CreateBillRequest) (*domain.Bill, error) {
+	if bill.BookID != req.BookID {
+		return nil, domain.ErrBillIDTaken
+	}
+	bill.Money = req.Money
+	bill.Type = req.Type
+	bill.Category = req.Category
+	bill.Time = req.Time
+	bill.Remark = req.Remark
+	if req.Images != nil {
+		bill.Images = req.Images
+	}
+	if err := u.billRepository.Update(ctx, bill); err != nil {
+		return nil, fmt.Errorf("update bill: %w", err)
+	}
+	notifyBookChange(ctx, u.notifier, bill.BookID, userID, "UPDATE_BILL", "bill", bill)
 	return bill, nil
 }
 

@@ -42,6 +42,7 @@ var errorRules = []errorRule{
 	// 记账域
 	{domain.ErrInvalidBillTime, http.StatusBadRequest, ""},
 	{domain.ErrImageBillMismatch, http.StatusBadRequest, ""},
+	{domain.ErrCategoryMismatch, http.StatusBadRequest, ""},
 	{domain.ErrRegisterUserExists, http.StatusConflict, ""},
 	// 设备授权码流程：CLI 依赖响应体里的原文（authorization_pending / slow_down / ...）
 	{domain.ErrDeviceAuthorizationPending, http.StatusBadRequest, ""},
@@ -91,6 +92,8 @@ var errorRules = []errorRule{
 	{domain.ErrUserAlreadyExists, http.StatusConflict, "该邮箱已关联现有用户"},
 	{domain.ErrUsernameExists, http.StatusConflict, "用户名已被使用"},
 	{domain.ErrBookNameExists, http.StatusConflict, ""},
+	{domain.ErrBookIDTaken, http.StatusConflict, ""},
+	{domain.ErrBillIDTaken, http.StatusConflict, ""},
 
 	// 5xx 依赖服务
 	{domain.ErrInvitationEmailNotConfigured, http.StatusServiceUnavailable, "邀请邮件服务未配置"},

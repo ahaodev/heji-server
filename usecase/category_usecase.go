@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -135,7 +136,30 @@ func (u *categoryUsecase) DeleteCategory(ctx context.Context, userID, id string)
 }
 
 func (u *categoryUsecase) create(ctx context.Context, userID string, req *domain.CreateCategoryRequest) (*domain.Category, error) {
+	// 客户端离线创建分类时自带 ID，重复上传按更新处理，保证离线重试幂等
+	if req.ID != "" {
+		existing, err := u.categoryRepository.GetByID(ctx, req.ID)
+		switch {
+		case err == nil:
+			if existing.BookID != req.BookID {
+				return nil, domain.ErrCategoryMismatch
+			}
+			existing.Name = req.Name
+			existing.Type = req.Type
+			existing.Level = req.Level
+			existing.Index = req.Index
+			existing.ParentID = req.ParentID
+			if err := u.categoryRepository.Update(ctx, existing); err != nil {
+				return nil, fmt.Errorf("update category: %w", err)
+			}
+			return existing, nil
+		case !errors.Is(err, domain.ErrCategoryNotFound):
+			return nil, err
+		}
+	}
+
 	category := &domain.Category{
+		ID:         req.ID,
 		BookID:     req.BookID,
 		Name:       req.Name,
 		Type:       req.Type,

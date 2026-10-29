@@ -27,8 +27,11 @@ var (
 	ErrBillImageNotFound = errors.New("账单图片不存在")
 	ErrNotBookMember     = errors.New("无权访问该账本")
 	ErrBookNameExists    = errors.New("同名账本已存在")
+	ErrBookIDTaken       = errors.New("账本ID已被占用")
+	ErrBillIDTaken       = errors.New("账单ID已被占用")
 	ErrInvalidBillTime   = errors.New("账单日期格式必须为 YYYY-MM-DD")
 	ErrImageBillMismatch = errors.New("图片不属于该账单")
+	ErrCategoryMismatch  = errors.New("分类不属于该账本")
 )
 
 // Book 账本实体
@@ -45,8 +48,10 @@ type Book struct {
 	UpdatedAt time.Time  `json:"upd_time"`
 }
 
-// CreateBookRequest 创建账本请求
+// CreateBookRequest 创建账本请求。ID 由客户端生成（离线创建后同步），缺省时服务端生成；
+// 相同 ID 重复提交视为幂等，返回已存在的账本。
 type CreateBookRequest struct {
+	ID        string `json:"_id,omitempty" binding:"omitempty,max=32"`
 	Name      string `json:"name" binding:"required,max=100"`
 	Type      string `json:"type,omitempty" binding:"max=50"`
 	Banner    string `json:"banner,omitempty" binding:"max=255"`
@@ -111,18 +116,23 @@ type BillQueryFilter struct {
 
 // Category 分类实体
 type Category struct {
-	ID         string `json:"_id"`
-	BookID     string `json:"book_id"`
-	Name       string `json:"name"`
-	Type       int    `json:"type"`
-	Level      int    `json:"level"`
-	Index      int    `json:"index"`
-	ParentID   string `json:"parentId,omitempty"`
-	CreateUser string `json:"create_user,omitempty"`
+	ID         string     `json:"_id"`
+	BookID     string     `json:"book_id"`
+	Name       string     `json:"name"`
+	Type       int        `json:"type"`
+	Level      int        `json:"level"`
+	Index      int        `json:"index"`
+	ParentID   string     `json:"parentId,omitempty"`
+	CreateUser string     `json:"create_user,omitempty"`
+	DeletedAt  *time.Time `json:"deleted_at,omitempty"`
+	CreatedAt  time.Time  `json:"crt_time"`
+	UpdatedAt  time.Time  `json:"upd_time"`
 }
 
-// CreateCategoryRequest 创建分类请求
+// CreateCategoryRequest 创建分类请求。ID 由客户端生成（离线创建后同步），缺省时服务端生成；
+// 相同 ID 重复提交按更新处理。
 type CreateCategoryRequest struct {
+	ID       string `json:"_id,omitempty" binding:"omitempty,max=32"`
 	BookID   string `json:"book_id" binding:"required"`
 	Name     string `json:"name" binding:"required,max=50"`
 	Type     int    `json:"type" binding:"required,oneof=1 -1"`
@@ -142,20 +152,24 @@ type UpdateCategoryRequest struct {
 
 // BillImage 账单图片实体
 type BillImage struct {
-	ID     string `json:"_id"`
-	BillID string `json:"bill_id"`
-	Key    string `json:"key"`
-	Ext    string `json:"ext,omitempty"`
-	Size   int64  `json:"length,omitempty"`
-	MD5    string `json:"md5,omitempty"`
+	ID        string     `json:"_id"`
+	BillID    string     `json:"bill_id"`
+	Key       string     `json:"key"`
+	Ext       string     `json:"ext,omitempty"`
+	Size      int64      `json:"length,omitempty"`
+	MD5       string     `json:"md5,omitempty"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+	UpdatedAt time.Time  `json:"upd_time"`
 }
 
-// SyncChangesResponse 增量拉取响应；since 之后有变更的账本与账单（含已软删除的记录）。
+// SyncChangesResponse 增量拉取响应；since 之后有变更的账本、账单、分类与图片（含已软删除的记录）。
 type SyncChangesResponse struct {
-	Books     []*Book `json:"books"`
-	Bills     []*Bill `json:"bills"`
-	HasMore   bool    `json:"has_more"`
-	NextSince int64   `json:"next_since"`
+	Books      []*Book      `json:"books"`
+	Bills      []*Bill      `json:"bills"`
+	Categories []*Category  `json:"categories"`
+	Images     []*BillImage `json:"images"`
+	HasMore    bool         `json:"has_more"`
+	NextSince  int64        `json:"next_since"`
 }
 
 // BillingNotifier 账本变更推送（由 internal/notifier 实现，未配置时为空实现）。
@@ -173,6 +187,8 @@ type BookRepository interface {
 	Delete(ctx context.Context, id string) error
 	AddMember(ctx context.Context, bookID, userID string) error
 	IsMember(ctx context.Context, bookID, userID string) (bool, error)
+	// ListMemberIDs 返回账本成员，包含已软删除的账本：删除通知需要在删除之后仍能定位接收者。
+	ListMemberIDs(ctx context.Context, bookID string) ([]string, error)
 }
 
 // BillRepository 账单数据访问接口

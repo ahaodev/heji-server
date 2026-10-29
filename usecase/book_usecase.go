@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -26,7 +27,20 @@ func (u *bookUsecase) CreateBook(ctx context.Context, userID string, req *domain
 	ctx, cancel := context.WithTimeout(ctx, u.contextTimeout)
 	defer cancel()
 
+	// 客户端离线创建账本时自带 ID，且把“改账本”也发到这里：
+	// 同 ID 再提交按更新处理，保证离线重试幂等。
+	if req.ID != "" {
+		existing, err := u.bookRepository.GetByID(ctx, req.ID)
+		switch {
+		case err == nil:
+			return u.applyUpdate(ctx, userID, existing, req)
+		case !errors.Is(err, domain.ErrBookNotFound):
+			return nil, err
+		}
+	}
+
 	book := &domain.Book{
+		ID:        req.ID,
 		Name:      req.Name,
 		Type:      req.Type,
 		Banner:    req.Banner,
@@ -38,6 +52,21 @@ func (u *bookUsecase) CreateBook(ctx context.Context, userID string, req *domain
 	}
 
 	notifyBookChange(ctx, u.notifier, book.ID, userID, "ADD_BOOK", "book", book)
+	return book, nil
+}
+
+// applyUpdate 把 Create 请求当作更新写入已存在的账本；ID 归属其他人时拒绝，避免覆盖他人数据。
+func (u *bookUsecase) applyUpdate(ctx context.Context, userID string, book *domain.Book, req *domain.CreateBookRequest) (*domain.Book, error) {
+	if book.CrtUserID != userID {
+		return nil, domain.ErrBookIDTaken
+	}
+	book.Name = req.Name
+	book.Type = req.Type
+	book.Banner = req.Banner
+	if err := u.bookRepository.Update(ctx, book); err != nil {
+		return nil, fmt.Errorf("update book: %w", err)
+	}
+	notifyBookChange(ctx, u.notifier, book.ID, userID, "UPDATE_BOOK", "book", book)
 	return book, nil
 }
 

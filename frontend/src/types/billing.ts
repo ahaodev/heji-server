@@ -16,6 +16,7 @@ export interface Book {
 }
 
 export interface CreateBookRequest {
+  _id?: string
   name: string
   type?: string
   banner?: string
@@ -85,9 +86,13 @@ export interface Category {
   index: number
   parentId?: string
   create_user?: string
+  deleted_at?: string
+  crt_time: string
+  upd_time: string
 }
 
 export interface CreateCategoryRequest {
+  _id?: string
   book_id: string
   name: string
   type: BillType
@@ -103,11 +108,15 @@ export interface BillImage {
   ext?: string
   length?: number
   md5?: string
+  deleted_at?: string
+  upd_time: string
 }
 
 export interface SyncChangesResponse {
   books: Book[]
   bills: Bill[]
+  categories: Category[]
+  images: BillImage[]
   has_more: boolean
   next_since: number
 }

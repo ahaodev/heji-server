@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"time"
+
 	"shadmin/domain"
 	"shadmin/ent"
 	"shadmin/ent/category"
@@ -33,11 +35,15 @@ func (r *entCategoryRepository) Create(ctx context.Context, c *domain.Category) 
 		return err
 	}
 	c.ID = created.ID
+	c.CreatedAt = created.CreatedAt
+	c.UpdatedAt = created.UpdatedAt
 	return nil
 }
 
 func (r *entCategoryRepository) GetByID(ctx context.Context, id string) (*domain.Category, error) {
-	c, err := clientFromContext(ctx, r.client).Category.Get(ctx, id)
+	c, err := clientFromContext(ctx, r.client).Category.Query().
+		Where(category.ID(id), category.DeletedAtIsNil()).
+		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			return nil, domain.ErrCategoryNotFound
@@ -49,7 +55,7 @@ func (r *entCategoryRepository) GetByID(ctx context.Context, id string) (*domain
 
 func (r *entCategoryRepository) ListByBookID(ctx context.Context, bookID string) ([]*domain.Category, error) {
 	categories, err := clientFromContext(ctx, r.client).Category.Query().
-		Where(category.BookID(bookID)).
+		Where(category.BookID(bookID), category.DeletedAtIsNil()).
 		Order(ent.Asc(category.FieldIndex)).
 		All(ctx)
 	if err != nil {
@@ -59,24 +65,28 @@ func (r *entCategoryRepository) ListByBookID(ctx context.Context, bookID string)
 }
 
 func (r *entCategoryRepository) Update(ctx context.Context, c *domain.Category) error {
-	err := clientFromContext(ctx, r.client).Category.UpdateOneID(c.ID).
+	updated, err := clientFromContext(ctx, r.client).Category.UpdateOneID(c.ID).
 		SetName(c.Name).
 		SetType(c.Type).
 		SetLevel(c.Level).
 		SetIndex(c.Index).
 		SetParentID(c.ParentID).
-		Exec(ctx)
+		Save(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			return domain.ErrCategoryNotFound
 		}
 		return err
 	}
+	c.UpdatedAt = updated.UpdatedAt
 	return nil
 }
 
+// Delete 软删除分类：客户端按 deleted_at 判断本地行是否需要移除，硬删除会让增量拉取丢事件。
 func (r *entCategoryRepository) Delete(ctx context.Context, id string) error {
-	err := clientFromContext(ctx, r.client).Category.DeleteOneID(id).Exec(ctx)
+	err := clientFromContext(ctx, r.client).Category.UpdateOneID(id).
+		SetDeletedAt(time.Now()).
+		Exec(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
 			return domain.ErrCategoryNotFound
@@ -96,5 +106,8 @@ func entCategoryToDomain(c *ent.Category) *domain.Category {
 		Index:      c.Index,
 		ParentID:   c.ParentID,
 		CreateUser: c.CreateUser,
+		DeletedAt:  c.DeletedAt,
+		CreatedAt:  c.CreatedAt,
+		UpdatedAt:  c.UpdatedAt,
 	}
 }

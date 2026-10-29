@@ -90,6 +90,8 @@ definitions:
         type: string
       bill_id:
         type: string
+      deleted_at:
+        type: string
       ext:
         type: string
       key:
@@ -97,6 +99,8 @@ definitions:
       length:
         type: integer
       md5:
+        type: string
+      upd_time:
         type: string
     type: object
   domain.BillPagedResult:
@@ -147,6 +151,10 @@ definitions:
         type: string
       create_user:
         type: string
+      crt_time:
+        type: string
+      deleted_at:
+        type: string
       index:
         type: integer
       level:
@@ -157,6 +165,8 @@ definitions:
         type: string
       type:
         type: integer
+      upd_time:
+        type: string
     type: object
   domain.ClientLoginRequest:
     properties:
@@ -218,6 +228,9 @@ definitions:
     type: object
   domain.CreateBookRequest:
     properties:
+      _id:
+        maxLength: 32
+        type: string
       banner:
         maxLength: 255
         type: string
@@ -234,6 +247,9 @@ definitions:
     type: object
   domain.CreateCategoryRequest:
     properties:
+      _id:
+        maxLength: 32
+        type: string
       book_id:
         type: string
       index:
@@ -885,8 +901,16 @@ definitions:
         items:
           $ref: '#/definitions/domain.Book'
         type: array
+      categories:
+        items:
+          $ref: '#/definitions/domain.Category'
+        type: array
       has_more:
         type: boolean
+      images:
+        items:
+          $ref: '#/definitions/domain.BillImage'
+        type: array
       next_since:
         type: integer
     type: object

@@ -67,7 +67,7 @@ func (n *MQTTNotifier) NotifyBookChange(parent context.Context, bookID, actorID,
 		return
 	}
 
-	content, err := json.Marshal(payload)
+	content, err := encodeContent(payload)
 	if err != nil {
 		slog.Warn("failed to marshal billing notification", "entity", entity, "error", err)
 		return
@@ -77,25 +77,38 @@ func (n *MQTTNotifier) NotifyBookChange(parent context.Context, bookID, actorID,
 	message := syncMessage{
 		Type:      changeType,
 		BookID:    bookID,
-		Content:   string(content),
+		Content:   content,
 		Timestamp: time.Now().UnixMilli(),
 	}
 
 	go func() {
 		defer cancel()
-		book, err := n.bookRepo.GetByID(ctx, bookID)
+		// 删除通知也要发给成员，因此这里取成员不要求账本未删除
+		members, err := n.bookRepo.ListMemberIDs(ctx, bookID)
 		if err != nil {
-			// 账本已删除时取不到成员：按操作者已知信息无法推送，直接跳过
 			slog.Debug("skip billing notification, book unavailable", "book_id", bookID, "error", err)
 			return
 		}
-		for _, memberID := range book.Members {
+		for _, memberID := range members {
 			if memberID == actorID {
 				continue
 			}
 			n.publish(fmt.Sprintf(notifyTopic, memberID, entity), message)
 		}
 	}()
+}
+
+// encodeContent 生成 SyncMessage.content。删除事件传的是裸 ID，客户端直接当字符串使用；
+// 其余事件传实体，编码为 JSON 对象。
+func encodeContent(payload any) (string, error) {
+	if id, ok := payload.(string); ok {
+		return id, nil
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 func (n *MQTTNotifier) publish(topic string, message syncMessage) {

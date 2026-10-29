@@ -51,6 +51,12 @@ func (u *billImageUsecase) UploadImage(ctx context.Context, userID, billID strin
 	img.MD5 = result.ETag
 
 	if err := u.imageRepository.Create(ctx, img); err != nil {
+		// 客户端离线重传同一图片（同一 _id）时文件已覆盖，视为幂等成功
+		if img.ID != "" {
+			if existing, getErr := u.imageRepository.GetByID(ctx, img.ID); getErr == nil {
+				return existing, nil
+			}
+		}
 		// 元数据写入失败时清理已上传的文件，避免孤儿对象
 		_ = u.fileRepository.Delete(ctx, upload.Bucket, result.Key)
 		return nil, fmt.Errorf("save image record: %w", err)

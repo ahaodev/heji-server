@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.1] - 2026-10-28
+
+### Changed
+
+- `POST /book` and `POST /bill` now honour a client-supplied `_id` and treat a repeat submission of the same ID as an update, so the heji Android client's offline queue (which only ever calls create) converges instead of retrying forever. An ID owned by another user is rejected with 409 (`ErrBookIDTaken` / `ErrBillIDTaken`).
+- `POST /category` accepts `_id` and also upserts on repeat; `DELETE /category/{id}` and `DELETE /image` are now soft deletes so deletions reach other devices through incremental sync.
+- `GET /sync/changes` pages by whole millisecond buckets and returns the minimum cursor across entities, so a book newer than a batch of bills no longer makes the client skip the undelivered bills. The response also carries `categories` and `images`.
+- Delete notifications publish the bare entity ID instead of a JSON-quoted string, and member lookup no longer hides soft-deleted books, so `DELETE_BOOK` actually reaches the other members.
+
+### Added
+
+- `Category` and `BillImage` carry `created_at` / `updated_at` (plus `deleted_at` for categories) so they can take part in incremental sync.
+- `BookRepository.ListMemberIDs` reads members without filtering deleted books.
+
 ## [0.6.0] - 2026-10-27
 
 ### Added

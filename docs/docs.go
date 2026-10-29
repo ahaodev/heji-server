@@ -5111,6 +5111,9 @@ const docTemplate = `{
                 "bill_id": {
                     "type": "string"
                 },
+                "deleted_at": {
+                    "type": "string"
+                },
                 "ext": {
                     "type": "string"
                 },
@@ -5121,6 +5124,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "md5": {
+                    "type": "string"
+                },
+                "upd_time": {
                     "type": "string"
                 }
             }
@@ -5198,6 +5204,12 @@ const docTemplate = `{
                 "create_user": {
                     "type": "string"
                 },
+                "crt_time": {
+                    "type": "string"
+                },
+                "deleted_at": {
+                    "type": "string"
+                },
                 "index": {
                     "type": "integer"
                 },
@@ -5212,6 +5224,9 @@ const docTemplate = `{
                 },
                 "type": {
                     "type": "integer"
+                },
+                "upd_time": {
+                    "type": "string"
                 }
             }
         },
@@ -5303,6 +5318,10 @@ const docTemplate = `{
                 "name"
             ],
             "properties": {
+                "_id": {
+                    "type": "string",
+                    "maxLength": 32
+                },
                 "banner": {
                     "type": "string",
                     "maxLength": 255
@@ -5328,6 +5347,10 @@ const docTemplate = `{
                 "type"
             ],
             "properties": {
+                "_id": {
+                    "type": "string",
+                    "maxLength": 32
+                },
                 "book_id": {
                     "type": "string"
                 },
@@ -6287,8 +6310,20 @@ const docTemplate = `{
                         "$ref": "#/definitions/domain.Book"
                     }
                 },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.Category"
+                    }
+                },
                 "has_more": {
                     "type": "boolean"
+                },
+                "images": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/domain.BillImage"
+                    }
                 },
                 "next_since": {
                     "type": "integer"

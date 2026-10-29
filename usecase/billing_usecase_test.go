@@ -84,6 +84,17 @@ func (r *stubBookRepo) IsMember(ctx context.Context, bookID, userID string) (boo
 	return ok, nil
 }
 
+func (r *stubBookRepo) ListMemberIDs(ctx context.Context, bookID string) ([]string, error) {
+	if _, ok := r.books[bookID]; !ok {
+		return nil, domain.ErrBookNotFound
+	}
+	ids := make([]string, 0, len(r.members[bookID]))
+	for id := range r.members[bookID] {
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
 type stubNotifier struct {
 	calls []string
 }

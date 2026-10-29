@@ -134,6 +134,24 @@ func (r *entBookRepository) IsMember(ctx context.Context, bookID, userID string)
 		Exist(ctx)
 }
 
+func (r *entBookRepository) ListMemberIDs(ctx context.Context, bookID string) ([]string, error) {
+	b, err := clientFromContext(ctx, r.client).Book.Query().
+		Where(book.ID(bookID)).
+		WithMembers().
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, domain.ErrBookNotFound
+		}
+		return nil, err
+	}
+	members := make([]string, 0, len(b.Edges.Members))
+	for _, m := range b.Edges.Members {
+		members = append(members, m.ID)
+	}
+	return members, nil
+}
+
 func entBookToDomain(b *ent.Book) *domain.Book {
 	members := make([]string, 0, len(b.Edges.Members))
 	for _, m := range b.Edges.Members {
